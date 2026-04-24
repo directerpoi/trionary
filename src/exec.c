@@ -107,6 +107,9 @@ static Expr* clone_expr(const Expr* src) {
     } else if (src->type == EXPR_CALL) {
         for (int i = 0; i < src->arg_count; i++)
             dst->args[i] = clone_expr(src->args[i]);
+    } else if (src->type == EXPR_COALESCE) {
+        dst->left  = clone_expr(src->left);
+        dst->right = clone_expr(src->right);
     }
     return dst;
 }
@@ -197,6 +200,16 @@ static double eval_expr(Expr* expr, SymTable* sym, FuncTable* ft) {
             double result = eval_expr(fd->body, sym, ft);
             scope_pop(sym);
             return result;
+        }
+
+        case EXPR_COALESCE: {
+            /* If the left side is a variable that does not exist, return the
+               right-hand fallback value without raising an error. */
+            if (expr->left && expr->left->type == EXPR_VARIABLE &&
+                !sym_exists(sym, expr->left->var_name)) {
+                return eval_expr(expr->right, sym, ft);
+            }
+            return eval_expr(expr->left, sym, ft);
         }
     }
     

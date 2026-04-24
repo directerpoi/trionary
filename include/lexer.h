@@ -16,7 +16,8 @@ typedef enum {
     TOK_EOF,
     TOK_ERROR,
     TOK_VAR_REF,            /* identifier immediately following an operator, e.g. *a +b */
-    TOK_NEWLINE             /* newline — used to separate fn params from body */
+    TOK_NEWLINE,            /* newline — used to separate fn params from body */
+    TOK_COALESCE            /* ?? — default/fallback operator */
 } TokenType;
 
 typedef struct {

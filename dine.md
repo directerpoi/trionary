@@ -419,3 +419,118 @@ src/parser.c            ← error_at() replaces local error(); line propagation
 src/exec.c              ← error_at() replaces fprintf + exit(1)
 Makefile                ← src/error.c added to SRCS
 ```
+
+---
+
+# Task 6 — CLI Input Improvements: Completion Notes
+
+## What Was Done
+
+Task 6 from `plan.md` has been implemented in full. The goal was to make `arg0`, `arg1`, … more ergonomic and add basic type coercion for CLI arguments passed to the interpreter.
+
+---
+
+## Syntax
+
+```bash
+tri run <file.tri> [arg0 arg1 ...]
+```
+
+Inside `<file.tri>`:
+
+```tri
+argc -> emt          # count of script arguments
+arg0 -> emt          # first argument (auto-coerced to double)
+arg1 + 5 -> emt      # arithmetic with CLI argument
+arg2 ?? 99 -> emt    # fallback if arg2 was not provided
+```
+
+---
+
+## Features
+
+### 1 — Auto-coercion of CLI arguments to numbers
+
+Arguments are registered in the global symbol table as `double` values via `atof()`. They participate in any arithmetic expression without any additional cast or conversion.
+
+### 2 — `argc` built-in variable
+
+`argc` is always defined in the global scope and holds the count of script arguments (i.e. `argv` entries after `<file.tri>`). When no extra arguments are provided, `argc` equals `0`.
+
+### 3 — `??` default-value operator
+
+`left ?? right` evaluates to the value of `left` if `left` is a defined variable, and to `right` otherwise. This is the primary way to handle optional CLI arguments:
+
+```tri
+arg0 ?? 1 -> emt    # arg0 if provided, else 1
+arg1 ?? 0 -> emt    # arg1 if provided, else 0
+```
+
+The operator is right-associative and has lower precedence than all arithmetic operators.
+
+---
+
+## Changes Made
+
+### Modified Files
+
+| File | Change |
+|------|--------|
+| `include/lexer.h` | Added `TOK_COALESCE` to `TokenType` |
+| `src/lexer.c` | Added `??` two-character token scanning, emitting `TOK_COALESCE` |
+| `include/parser.h` | Added `EXPR_COALESCE` to `ExprType` |
+| `src/parser.c` | Added `parse_coalesce()` (right-associative, wraps `parse_expr()`); updated `parse()`, `parse_fn_def()`, and `parse_pipeline()` trn branch to call `parse_coalesce()` as the top-level expression entry point; added `EXPR_COALESCE` case to `free_expr()` |
+| `src/exec.c` | Added `EXPR_COALESCE` case to `clone_expr()` and `eval_expr()` — if the left operand is an undefined variable, the right fallback is returned without raising an error |
+| `src/main.c` | Relaxed `argc != 3` to `argc < 3` to allow extra script arguments; registers `argc` (count) and `arg0`…`argN` (values via `atof()`) in the global symbol table before executing any statements |
+| `README.md` | Updated Usage section; added CLI Input and `??` subsections to Language Reference; added v0.3.0 changelog entry |
+
+### New Files
+
+| File | Purpose |
+|------|---------|
+| `tests/test_cli_args.tri` | Verifies `argc`, `arg0`, `arg1`, arithmetic with args, and `??` fallback |
+
+---
+
+## Design Decisions
+
+- **Symbol-table registration.** `arg0`…`argN` are only registered for the arguments actually supplied. If only 2 extra args are given, `arg2` is absent from the symbol table, so `arg2 ?? 99` returns `99` — exactly the desired behaviour.
+- **`argc` always present.** Unlike `arg0`…`argN`, `argc` is unconditionally registered (value `0` when no extras are given). This makes `argc` safe to use without `??`.
+- **`??` is expression-level, not statement-level.** The operator is parsed as part of the expression grammar, so it works anywhere an expression is valid: standalone emit, arithmetic sub-expressions, `trn` bodies, and function bodies.
+- **No behaviour change for v0.2 / v0.3 programs.** All existing tests produce byte-for-byte identical output. The only reserved names added are `argc` and `arg0`…`argN` (when extra CLI args are supplied).
+
+---
+
+## Verification
+
+```
+$ make clean && make
+$ ./tri run tests/test_arith.tri              # → 15 / 14
+$ ./tri run tests/test_vars.tri               # → 15 / 70
+$ ./tri run tests/test_pipeline.tri           # → 120
+$ ./tri run tests/test_all.tri                # all expected values
+$ ./tri run tests/test_trn_expr.tri           # → 12 16 20 / 21 22 23 / 120
+$ ./tri run tests/test_fn.tri                 # → 7 / 42 / 10 / 10 11 12
+$ ./tri run tests/test_modules.tri            # → 3 / 4 / 5 / 3 / 8 / 14
+$ ./tri run tests/test_cli_args.tri 7 3       # → 2 / 7 / 3 / 10 / 14 / 99 / 7
+# Error cases — exit code 1 with correct message:
+$ ./tri run tests/test_invalid.tri            # Error: Unexpected character '"' at line 1
+$ ./tri run tests/test_trn_undef.tri          # Error: Undefined variable 'undef' at line 2
+```
+
+All checks pass. No pre-existing test output changed.
+
+---
+
+## Files Touched (summary)
+
+```
+include/lexer.h            ← TOK_COALESCE added
+src/lexer.c                ← ?? token lexing
+include/parser.h           ← EXPR_COALESCE added
+src/parser.c               ← parse_coalesce(); EXPR_COALESCE in free_expr(); top-level calls updated
+src/exec.c                 ← EXPR_COALESCE in clone_expr() and eval_expr()
+src/main.c                 ← argc check relaxed; arg0..argN and argc registered
+README.md                  ← Usage, Language Reference, and Changelog updated
+tests/test_cli_args.tri    ← new
+```

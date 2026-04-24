@@ -120,6 +120,12 @@ Token* tokenise(const char* src, int* count) {
             continue;
         }
 
+        if (src[i] == '?' && src[i+1] != '\0' && src[i+1] == '?') {
+            tokens[n++] = make_token(TOK_COALESCE, "??");
+            i += 2;
+            continue;
+        }
+
         if (src[i] == '-' && src[i+1] == '>') {
             tokens[n++] = make_token(TOK_ARROW, "->");
             i += 2;

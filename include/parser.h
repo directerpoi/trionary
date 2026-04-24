@@ -24,7 +24,8 @@ typedef enum {
     EXPR_NUMBER,
     EXPR_VARIABLE,
     EXPR_BINARY,
-    EXPR_CALL       /* function call: fn_name(args...) */
+    EXPR_CALL,       /* function call: fn_name(args...) */
+    EXPR_COALESCE    /* left ?? right — if left is undefined, use right */
 } ExprType;
 
 typedef struct Expr {
