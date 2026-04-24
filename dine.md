@@ -401,3 +401,39 @@ The following behaviours must be **preserved unchanged** by every v0.2.0 step:
 - Documented the complete token set (16 token types), the v0.1.0 grammar in EBNF, all AST node structures, the symbol-table layout, and the pipeline execution model.
 - Noted all behavioural constraints that subsequent steps must not violate.
 - No source files were modified; this is a read-only audit step.
+
+---
+
+## 11. What Was Done (Step 2 Summary)
+
+**Goal:** Extend the lexer to recognise variable-reference tokens inside pipeline transform positions (e.g. `*a`, `+b`), emitting a dedicated `TOK_VAR_REF` token so the parser (Step 3) can distinguish a variable operand from a literal number without ambiguity.
+
+### Files modified
+
+| File | Change |
+|------|--------|
+| `include/lexer.h` | Added `TOK_VAR_REF` to the `TokenType` enum, appended **after** `TOK_ERROR` so no existing enum value is removed, renamed, or renumbered. |
+| `src/lexer.c` | Merged the two `continue` branches of the operator scanner into one unified block. After emitting a `TOK_OP` token, the scanner now checks whether the very next character (with no intervening whitespace) is alphabetic. If so, it reads the full identifier and emits it as `TOK_VAR_REF` instead of `TOK_IDENT`. |
+
+### New token
+
+| Token | Lexeme | Trigger |
+|-------|--------|---------|
+| `TOK_VAR_REF` | identifier name (e.g. `scale`) | An operator character is followed **immediately** (no whitespace) by one or more alphabetic characters, e.g. `*scale`, `+b`, `>=limit`. |
+
+### Lexing examples
+
+| Input fragment | Token stream produced |
+|----------------|-----------------------|
+| `trn *scale` | `TOK_TRN` `TOK_OP("*")` `TOK_VAR_REF("scale")` |
+| `whn >threshold` | `TOK_WHN` `TOK_OP(">")` `TOK_VAR_REF("threshold")` |
+| `trn *10` | `TOK_TRN` `TOK_OP("*")` `TOK_NUMBER("10")` — **unchanged** |
+| `a * b` (spaces) | `TOK_IDENT("a")` `TOK_OP("*")` `TOK_IDENT("b")` — **unchanged** |
+
+### Backward-compatibility verification
+
+- All eight existing `.tri` test files were re-run after the change.
+- Every file produced **byte-for-byte identical** stdout, stderr, and exit code to the v0.1.0 baseline recorded in this document (Section 8).
+- No existing token type was removed, renamed, or renumbered.
+- The existing `TOK_IDENT` path (alphabetic chars after whitespace) is completely untouched.
+- The `TOK_VAR_REF` path only fires when an operator is followed **without whitespace** by an alphabetic character — a pattern absent from all v0.1.0 test inputs.

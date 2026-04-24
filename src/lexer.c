@@ -148,11 +148,23 @@ Token* tokenise(const char* src, int* count) {
                 op[2] = '\0';
                 tokens[n++] = make_token(TOK_OP, op);
                 i += 2;
-                continue;
+            } else {
+                op[1] = '\0';
+                tokens[n++] = make_token(TOK_OP, op);
+                i++;
             }
-            op[1] = '\0';
-            tokens[n++] = make_token(TOK_OP, op);
-            i++;
+            /* If the operator is immediately followed (no whitespace) by an alphabetic
+               character, emit the identifier as TOK_VAR_REF so the parser can distinguish
+               a variable reference (e.g. *a) from a numeric literal (e.g. *10). */
+            if (isalpha(src[i])) {
+                char word[64];
+                int wi = 0;
+                while (isalpha(src[i]) && wi < 63) {
+                    word[wi++] = src[i++];
+                }
+                word[wi] = '\0';
+                tokens[n++] = make_token(TOK_VAR_REF, word);
+            }
             continue;
         }
 

@@ -11,7 +11,8 @@ typedef enum {
     TOK_ASSIGN,             /* = */
     TOK_OP,                 /* + - * / > < >= <= == != ^ */
     TOK_EOF,
-    TOK_ERROR
+    TOK_ERROR,
+    TOK_VAR_REF             /* identifier immediately following an operator, e.g. *a +b */
 } TokenType;
 
 typedef struct {
