@@ -13,8 +13,10 @@ static double builtin_print(double *args, int n) {
 /* read_line(default): reads a double from stdin; returns default on EOF/error */
 static double builtin_read_line(double *args, int n) {
     (void)n;
+    char buf[64];
+    if (!fgets(buf, sizeof(buf), stdin)) return args[0];
     double val;
-    if (scanf("%lf", &val) == 1) return val;
+    if (sscanf(buf, "%lf", &val) == 1) return val;
     return args[0];
 }
 
