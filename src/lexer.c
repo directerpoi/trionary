@@ -1,4 +1,5 @@
 #include "lexer.h"
+#include "error.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -169,10 +170,7 @@ Token* tokenise(const char* src, int* count) {
         }
 
         // Unknown character
-        fprintf(stderr, "Error: Unexpected character '%c' at line %d\n", src[i], line);
-        tokens[n++] = make_token(TOK_ERROR, "");
-        *count = n;
-        return tokens;
+        error_at(line, "Unexpected character '%c'", src[i]);
     }
 
     tokens[n++] = make_token(TOK_EOF, "");

@@ -1,4 +1,5 @@
 #include "exec.h"
+#include "error.h"
 #include "output.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -61,8 +62,7 @@ double sym_get(SymTable* t, const char* name) {
             return t->entries[i].value;
         }
     }
-    fprintf(stderr, "Error: Undefined variable '%s'\n", name);
-    return 0.0;
+    error_at(0, "Undefined variable '%s'", name);
 }
 
 static double eval_expr(Expr* expr, SymTable* sym) {
@@ -74,9 +74,7 @@ static double eval_expr(Expr* expr, SymTable* sym) {
             
         case EXPR_VARIABLE:
             if (!sym_exists(sym, expr->var_name)) {
-                fprintf(stderr, "Error: Undefined variable '%s' at line %d\n",
-                        expr->var_name, expr->line);
-                return 0.0;
+                error_at(expr->line, "Undefined variable '%s'", expr->var_name);
             }
             return sym_get(sym, expr->var_name);
             
@@ -123,9 +121,7 @@ static double apply_transform(double val, Transform* trn, SymTable* sym) {
     double operand;
     if (trn->is_var_ref) {
         if (!sym_exists(sym, trn->var_name)) {
-            fprintf(stderr, "Error: Undefined variable '%s' at line %d\n",
-                    trn->var_name, trn->line);
-            exit(1);
+            error_at(trn->line, "Undefined variable '%s'", trn->var_name);
         }
         operand = sym_get(sym, trn->var_name);
     } else {

@@ -27,12 +27,14 @@ typedef struct ArithNode {
         struct ArithNode* node;
     } right;
     int is_right_num;
+    int line; /* source line of the expression root */
 } ArithNode;
 
 typedef struct {
     NodeType type;
     char name[64];
     double value;
+    int line; /* source line of the assignment */
 } AssignNode;
 
 typedef struct {
@@ -61,6 +63,7 @@ typedef struct {
     int has_filter;
     int has_transform;
     int has_sum;
+    int line; /* source line of the lst keyword */
 } PipelineNode;
 
 typedef struct {
