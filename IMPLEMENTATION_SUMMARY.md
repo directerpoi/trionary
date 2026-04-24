@@ -6,14 +6,22 @@ Trionary v0 is a minimal, readable programming language with a focus on pipeline
 ## Project Structure
 ```
 /workspace/
-├── main.c          - CLI entry point and statement execution loop
-├── reader.c/h      - File reading into memory buffer
-├── lexer.c/h       - Tokenizer/lexical analyzer
-├── parser.c/h      - Pattern-based parser with AST generation
-├── exec.c/h        - Execution engine with symbol table
-├── output.c/h      - Output formatting system
-├── Makefile        - Build configuration
-└── test_*.tri      - Test files
+├── src/
+│   ├── main.c      - CLI entry point and statement execution loop
+│   ├── reader.c    - File reading into memory buffer
+│   ├── lexer.c     - Tokenizer/lexical analyzer
+│   ├── parser.c    - Pattern-based parser with AST generation
+│   ├── exec.c      - Execution engine with symbol table
+│   └── output.c    - Output formatting system
+├── include/
+│   ├── reader.h
+│   ├── lexer.h
+│   ├── parser.h
+│   ├── exec.h
+│   └── output.h
+├── tests/
+│   └── test_*.tri  - Test files
+└── Makefile        - Build configuration
 ```
 
 ## Keywords (5 total)
@@ -95,7 +103,7 @@ Actual:   120 ✓
 ## Build & Run
 ```bash
 # Compile
-gcc -std=c11 -Wall -Wextra -O2 main.c reader.c lexer.c parser.c exec.c output.c -o tri -lm
+gcc -std=c11 -Wall -Wextra -O2 -Iinclude src/main.c src/reader.c src/lexer.c src/parser.c src/exec.c src/output.c -o tri -lm
 
 # Run
 ./tri run file.tri
