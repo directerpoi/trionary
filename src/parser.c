@@ -281,8 +281,15 @@ static PipelineNode* parse_pipeline() {
                 return node;
             }
             
-            node->transforms = realloc(node->transforms,
+            Transform** tmp = realloc(node->transforms,
                                        (node->transform_count + 1) * sizeof(Transform*));
+            if (!tmp) {
+                int err_line = trn->line;
+                free(trn);
+                error("Out of memory allocating transform", err_line);
+                return node;
+            }
+            node->transforms = tmp;
             node->transforms[node->transform_count++] = trn;
             node->has_transform = 1;
         } else if (match(TOK_SUM)) {
