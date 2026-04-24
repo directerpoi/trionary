@@ -94,7 +94,39 @@ double sym_get(SymTable* t, const char* name) {
     return 0.0; /* unreachable */
 }
 
-static double eval_expr(Expr* expr, SymTable* sym) {
+/* ---- Function table ---- */
+
+/* Deep-clone an Expr tree (used when storing a function body). */
+static Expr* clone_expr(const Expr* src) {
+    if (!src) return NULL;
+    Expr* dst = malloc(sizeof(Expr));
+    *dst = *src; /* copies all scalar fields shallowly */
+    if (src->type == EXPR_BINARY) {
+        dst->left  = clone_expr(src->left);
+        dst->right = clone_expr(src->right);
+    } else if (src->type == EXPR_CALL) {
+        for (int i = 0; i < src->arg_count; i++)
+            dst->args[i] = clone_expr(src->args[i]);
+    }
+    return dst;
+}
+
+FuncTable* create_functable(void) {
+    FuncTable* ft = calloc(1, sizeof(FuncTable));
+    return ft;
+}
+
+void free_functable(FuncTable* ft) {
+    for (int i = 0; i < ft->count; i++)
+        free_expr(ft->funcs[i].body);
+    free(ft);
+}
+
+/* ---- Expression evaluator ---- */
+
+static double eval_expr(Expr* expr, SymTable* sym, FuncTable* ft);
+
+static double eval_expr(Expr* expr, SymTable* sym, FuncTable* ft) {
     if (!expr) return 0.0;
     
     switch (expr->type) {
@@ -108,8 +140,8 @@ static double eval_expr(Expr* expr, SymTable* sym) {
             return sym_get(sym, expr->var_name);
             
         case EXPR_BINARY: {
-            double left = eval_expr(expr->left, sym);
-            double right = eval_expr(expr->right, sym);
+            double left = eval_expr(expr->left, sym, ft);
+            double right = eval_expr(expr->right, sym, ft);
             
             switch (expr->op) {
                 case OP_ADD: return left + right;
@@ -129,6 +161,36 @@ static double eval_expr(Expr* expr, SymTable* sym) {
                 default: return left;
             }
         }
+
+        case EXPR_CALL: {
+            /* Look up the function definition */
+            FuncDef* fd = NULL;
+            for (int i = 0; i < ft->count; i++) {
+                if (strcmp(ft->funcs[i].name, expr->var_name) == 0) {
+                    fd = &ft->funcs[i];
+                    break;
+                }
+            }
+            if (!fd) {
+                error_at(expr->line, "Undefined function '%s'", expr->var_name);
+            }
+            if (expr->arg_count != fd->param_count) {
+                error_at(expr->line,
+                         "Function '%s' expects %d argument(s) but got %d",
+                         expr->var_name, fd->param_count, expr->arg_count);
+            }
+            /* Evaluate all arguments in the caller's scope before pushing */
+            double arg_vals[MAX_PARAMS];
+            for (int i = 0; i < expr->arg_count; i++)
+                arg_vals[i] = eval_expr(expr->args[i], sym, ft);
+            /* Push function scope, bind parameters, evaluate body, pop */
+            scope_push(sym);
+            for (int i = 0; i < fd->param_count; i++)
+                sym_set(sym, fd->params[i], arg_vals[i]);
+            double result = eval_expr(fd->body, sym, ft);
+            scope_pop(sym);
+            return result;
+        }
     }
     
     return 0.0;
@@ -146,8 +208,8 @@ static double apply_condition(double val, Condition* cond) {
     }
 }
 
-static double apply_transform(double val, Transform* trn, SymTable* sym) {
-    double operand = eval_expr(trn->expr, sym);
+static double apply_transform(double val, Transform* trn, SymTable* sym, FuncTable* ft) {
+    double operand = eval_expr(trn->expr, sym, ft);
     switch (trn->op) {
         case OP_ADD: return val + operand;
         case OP_SUB: return val - operand;
@@ -167,7 +229,7 @@ static double apply_transform(double val, Transform* trn, SymTable* sym) {
     }
 }
 
-static void exec_pipeline(PipelineNode* node, SymTable* sym) {
+static void exec_pipeline(PipelineNode* node, SymTable* sym, FuncTable* ft) {
     double acc = 0.0;
     int do_sum = node->has_sum;
 
@@ -181,7 +243,7 @@ static void exec_pipeline(PipelineNode* node, SymTable* sym) {
 
         if (node->has_transform) {
             for (int t = 0; t < node->transform_count; t++) {
-                val = apply_transform(val, node->transforms[t], sym);
+                val = apply_transform(val, node->transforms[t], sym, ft);
             }
         }
 
@@ -201,7 +263,23 @@ static void exec_assign(AssignNode* node, SymTable* sym) {
     sym_set(sym, node->name, node->value);
 }
 
-void execute(ASTNode* ast, SymTable* sym) {
+static void exec_fn_def(FnDefNode* node, FuncTable* ft) {
+    if (ft->count >= MAX_FUNCS) {
+        error_at(node->line, "Function table full: cannot define '%s'", node->name);
+    }
+    FuncDef* fd = &ft->funcs[ft->count++];
+    strncpy(fd->name, node->name, 63);
+    fd->name[63] = '\0';
+    fd->param_count = node->param_count;
+    for (int i = 0; i < node->param_count; i++) {
+        strncpy(fd->params[i], node->params[i], 63);
+        fd->params[i][63] = '\0';
+    }
+    fd->body = clone_expr(node->body);
+    fd->line = node->line;
+}
+
+void execute(ASTNode* ast, SymTable* sym, FuncTable* ft) {
     /* sym is shared across all statements in the file so that variables
        assigned before or between pipelines remain visible in subsequent
        pipelines (symbol table is never reset between pipelines). */
@@ -213,13 +291,17 @@ void execute(ASTNode* ast, SymTable* sym) {
             break;
             
         case STMT_ARITH: {
-            double result = eval_expr((Expr*)ast->node.arith, sym);
+            double result = eval_expr((Expr*)ast->node.arith, sym, ft);
             emit_value(result);
             break;
         }
             
         case STMT_PIPELINE:
-            exec_pipeline(ast->node.pipeline, sym);
+            exec_pipeline(ast->node.pipeline, sym, ft);
+            break;
+
+        case STMT_FN_DEF:
+            exec_fn_def(ast->node.fn_def, ft);
             break;
             
         case STMT_EMTPY:

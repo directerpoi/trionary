@@ -29,11 +29,31 @@ void      sym_set(SymTable* t, const char* name, double val);
 double    sym_get(SymTable* t, const char* name);
 int       sym_exists(SymTable* t, const char* name);
 
-/* Push a new isolated scope (used by future function calls). */
+/* Push a new isolated scope (used by function calls). */
 void scope_push(SymTable* t);
 /* Pop the current scope and restore the enclosing one. */
 void scope_pop(SymTable* t);
 
-void execute(ASTNode* ast, SymTable* sym);
+/* Maximum number of user-defined functions. */
+#define MAX_FUNCS 64
+
+/* Stored function definition (body is a cloned Expr* owned by FuncTable). */
+typedef struct {
+    char   name[64];
+    char   params[MAX_PARAMS][64];
+    int    param_count;
+    Expr  *body;
+    int    line;
+} FuncDef;
+
+typedef struct {
+    FuncDef funcs[MAX_FUNCS];
+    int     count;
+} FuncTable;
+
+FuncTable* create_functable(void);
+void       free_functable(FuncTable* ft);
+
+void execute(ASTNode* ast, SymTable* sym, FuncTable* ft);
 
 #endif

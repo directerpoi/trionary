@@ -23,7 +23,9 @@ static int is_keyword(const char* word) {
            strcmp(word, "whn") == 0 ||
            strcmp(word, "trn") == 0 ||
            strcmp(word, "sum") == 0 ||
-           strcmp(word, "emt") == 0;
+           strcmp(word, "emt") == 0 ||
+           strcmp(word, "fn")  == 0 ||
+           strcmp(word, "end") == 0;
 }
 
 static TokenType keyword_type(const char* word) {
@@ -32,6 +34,8 @@ static TokenType keyword_type(const char* word) {
     if (strcmp(word, "trn") == 0) return TOK_TRN;
     if (strcmp(word, "sum") == 0) return TOK_SUM;
     if (strcmp(word, "emt") == 0) return TOK_EMT;
+    if (strcmp(word, "fn")  == 0) return TOK_FN;
+    if (strcmp(word, "end") == 0) return TOK_END;
     return TOK_ERROR;
 }
 
@@ -39,10 +43,8 @@ static void skip_whitespace_and_comments(const char* src, int* i) {
     while (src[*i] != '\0') {
         if (src[*i] == ' ' || src[*i] == '\t' || src[*i] == '\r') {
             (*i)++;
-        } else if (src[*i] == '\n') {
-            line++;
-            (*i)++;
         } else if (src[*i] == '#') {
+            /* Skip to end of line (but don't consume the newline) */
             while (src[*i] != '\n' && src[*i] != '\0') (*i)++;
         } else {
             break;
@@ -105,6 +107,13 @@ Token* tokenise(const char* src, int* count) {
         // Single and double character operators/symbols
         if (src[i] == '|') {
             tokens[n++] = make_token(TOK_PIPE, "|");
+            i++;
+            continue;
+        }
+
+        if (src[i] == '\n') {
+            tokens[n++] = make_token(TOK_NEWLINE, "\n");
+            line++;
             i++;
             continue;
         }
