@@ -113,15 +113,25 @@ static double apply_condition(double val, Condition* cond) {
     }
 }
 
-static double apply_transform(double val, Transform* trn) {
+static double apply_transform(double val, Transform* trn, SymTable* sym) {
+    double operand;
+    if (trn->is_var_ref) {
+        if (!sym_exists(sym, trn->var_name)) {
+            fprintf(stderr, "Error: Undefined variable '%s'\n", trn->var_name);
+            exit(1);
+        }
+        operand = sym_get(sym, trn->var_name);
+    } else {
+        operand = trn->value;
+    }
     switch (trn->op) {
-        case OP_ADD: return val + trn->value;
-        case OP_SUB: return val - trn->value;
-        case OP_MUL: return val * trn->value;
-        case OP_DIV: return val / trn->value;
+        case OP_ADD: return val + operand;
+        case OP_SUB: return val - operand;
+        case OP_MUL: return val * operand;
+        case OP_DIV: return val / operand;
         case OP_POW: {
             double result = 1.0;
-            int n = (int)trn->value;
+            int n = (int)operand;
             if (n >= 0) {
                 for (int i = 0; i < n; i++) result *= val;
             } else {
@@ -133,7 +143,7 @@ static double apply_transform(double val, Transform* trn) {
     }
 }
 
-static void exec_pipeline(PipelineNode* node) {
+static void exec_pipeline(PipelineNode* node, SymTable* sym) {
     double acc = 0.0;
     int do_sum = node->has_sum;
 
@@ -146,7 +156,7 @@ static void exec_pipeline(PipelineNode* node) {
         }
 
         if (node->has_transform) {
-            val = apply_transform(val, node->transform);
+            val = apply_transform(val, node->transform, sym);
         }
 
         if (do_sum) {
@@ -180,7 +190,7 @@ void execute(ASTNode* ast, SymTable* sym) {
         }
             
         case STMT_PIPELINE:
-            exec_pipeline(ast->node.pipeline);
+            exec_pipeline(ast->node.pipeline, sym);
             break;
             
         case STMT_EMTPY:

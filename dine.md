@@ -466,3 +466,30 @@ transform_stage ::= 'trn' OP NUMBER        /* unchanged */
 - Every file produced **byte-for-byte identical** stdout, stderr, and exit code to the v0.1.0 baseline recorded in Section 8.
 - No existing token type, AST node type, or executor path was removed or altered.
 - The `apply_transform()` function in `exec.c` remains untouched; it still reads `trn->value`, which is initialised to `0.0` for variable-reference nodes (Step 4 will add the symbol-table lookup).
+
+---
+
+## 13. What Was Done (Step 4 Summary)
+
+**Goal:** Update the executor's `trn` handler to resolve variable references at execution time. When the `Transform` node carries `is_var_ref == 1`, the executor looks up the variable in the symbol table and aborts with a clear error if it is undefined. All arithmetic and non-pipeline execution paths remain untouched.
+
+### Files modified
+
+| File | Change |
+|------|--------|
+| `src/exec.c` | Three targeted edits (described below); no other file was changed. |
+
+### Changes in detail
+
+1. **`apply_transform()` signature extended** — The function now accepts a `SymTable* sym` third parameter. At the top of the function, a local `double operand` is resolved: if `trn->is_var_ref == 1` the function calls `sym_exists()` and, if the variable is absent, prints `"Error: Undefined variable '<name>'"` to `stderr` and calls `exit(1)` to abort cleanly; if the variable exists, `sym_get()` returns its current value. When `is_var_ref == 0` the literal `trn->value` is used, preserving the unchanged v0.1.0 path exactly. All five arithmetic operators (`+`, `-`, `*`, `/`, `^`) now use `operand` instead of `trn->value`.
+
+2. **`exec_pipeline()` signature extended** — Accepts a new `SymTable* sym` parameter and forwards it to every `apply_transform()` call inside the element loop.
+
+3. **`execute()` updated** — The `STMT_PIPELINE` branch passes the existing `sym` pointer through to `exec_pipeline()`.
+
+### Backward-compatibility verification
+
+- All eight existing `.tri` test files (`test_arith.tri`, `test_vars.tri`, `test_pipeline.tri`, `test_all.tri`, `demo.tri`, `test_error.tri`, `test_invalid.tri`, `test_malformed.tri`) were rebuilt and re-run after the change.
+- Every file produced **byte-for-byte identical** stdout, stderr, and exit code to the v0.1.0 baseline recorded in Section 8.
+- No existing token type, AST node type, or other execution path was removed or altered.
+- The `sym_get()` / `sym_exists()` helpers are the same ones already used for arithmetic variable resolution; no new symbol-table logic was introduced.
