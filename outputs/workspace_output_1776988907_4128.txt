@@ -1,4 +1,0 @@
-parser.c: In function ‘parse’:
-parser.c:297:25: warning: assignment to ‘ArithNode *’ from incompatible pointer type ‘Expr *’ [-Wincompatible-pointer-types]
-  297 |         ast->node.arith = parse_expr();
-      |                         ^

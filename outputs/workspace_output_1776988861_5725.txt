@@ -1,3 +1,0 @@
-parser.c:35:12: warning: ‘check’ defined but not used [-Wunused-function]
-   35 | static int check(TokenType type) {
-      |            ^~~~~
