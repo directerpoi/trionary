@@ -23,6 +23,8 @@ typedef struct Expr {
     OpType op;
     struct Expr* left;
     struct Expr* right;
+
+    int line; /* source line where this expression token was seen */
 } Expr;
 
 static int current = 0;
@@ -71,6 +73,7 @@ static OpType get_op_type(const char* op) {
 static Expr* create_expr(ExprType type) {
     Expr* expr = malloc(sizeof(Expr));
     expr->type = type;
+    expr->line = 0;
     return expr;
 }
 
@@ -80,14 +83,17 @@ static Expr* parse_primary() {
     if (match(TOK_NUMBER)) {
         expr = create_expr(EXPR_NUMBER);
         expr->num_val = atof(tokens[current - 1].lexeme);
+        expr->line = tokens[current - 1].line;
     } else if (match(TOK_IDENT)) {
         expr = create_expr(EXPR_VARIABLE);
         strncpy(expr->var_name, tokens[current - 1].lexeme, 63);
         expr->var_name[63] = '\0';
+        expr->line = tokens[current - 1].line;
     } else {
         error("Expected number or identifier", peek().line);
         expr = create_expr(EXPR_NUMBER);
         expr->num_val = 0;
+        expr->line = peek().line;
     }
     
     return expr;
@@ -225,6 +231,7 @@ static PipelineNode* parse_pipeline() {
     
     while (match(TOK_PIPE)) {
         if (match(TOK_WHN)) {
+            int cond_line = tokens[current - 1].line;
             if (!match(TOK_OP)) {
                 error("Expected operator after 'whn'", peek().line);
                 return node;
@@ -234,6 +241,7 @@ static PipelineNode* parse_pipeline() {
             strncpy(cond->op_lexeme, tokens[current - 1].lexeme, 3);
             cond->op_lexeme[3] = '\0';
             cond->op = get_op_type(cond->op_lexeme);
+            cond->line = cond_line;
             
             if (!match(TOK_NUMBER)) {
                 error("Expected number after condition operator", peek().line);
@@ -245,6 +253,7 @@ static PipelineNode* parse_pipeline() {
             node->filter = cond;
             node->has_filter = 1;
         } else if (match(TOK_TRN)) {
+            int trn_line = tokens[current - 1].line;
             if (!match(TOK_OP)) {
                 error("Expected operator after 'trn'", peek().line);
                 return node;
@@ -257,6 +266,7 @@ static PipelineNode* parse_pipeline() {
             trn->is_var_ref = 0;
             trn->var_name[0] = '\0';
             trn->value = 0.0;
+            trn->line = trn_line;
             
             if (match(TOK_VAR_REF)) {
                 trn->is_var_ref = 1;

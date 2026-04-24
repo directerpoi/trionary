@@ -360,7 +360,7 @@ print "hello"
 **stderr:**
 ```
 Error: Unexpected character '"' at line 1
-Error: Undefined variable 'print'
+Error: Undefined variable 'print' at line 1
 ```
 **exit:** 0
 
@@ -493,3 +493,34 @@ transform_stage ::= 'trn' OP NUMBER        /* unchanged */
 - Every file produced **byte-for-byte identical** stdout, stderr, and exit code to the v0.1.0 baseline recorded in Section 8.
 - No existing token type, AST node type, or other execution path was removed or altered.
 - The `sym_get()` / `sym_exists()` helpers are the same ones already used for arithmetic variable resolution; no new symbol-table logic was introduced.
+
+---
+
+## 14. What Was Done (Step 5 Summary)
+
+**Goal:** Augment all error-reporting sites in `lexer.c`, `parser.c`, and `exec.c` to include a line number and human-readable "expected …" phrasing, without introducing any new output channel.
+
+### Files modified
+
+| File | Change |
+|------|--------|
+| `include/parser.h` | Added `int line` field to `Condition` and `Transform` structs so the executor can reference the source line when reporting runtime errors. |
+| `src/parser.c` | Added `int line` to the internal `Expr` struct; initialised it to `0` in `create_expr()`; set it from `tokens[current-1].line` in `parse_primary()` for both number and identifier tokens; stored the `whn`/`trn` keyword line into `cond->line` / `trn->line` at the start of those branches in `parse_pipeline()`. |
+| `src/exec.c` | Added `int line` to the mirrored internal `Expr` struct; in `eval_expr()` replaced the bare `sym_get()` call for `EXPR_VARIABLE` with a prior `sym_exists()` check that emits `"Error: Undefined variable '<name>' at line <N>"` when the variable is absent; in `apply_transform()` updated the undefined-variable error to include `trn->line`. |
+
+### Error-message improvements in detail
+
+| Site | Before | After |
+|------|--------|-------|
+| `exec.c` – arithmetic undefined variable (`eval_expr`) | `Error: Undefined variable 'X'` | `Error: Undefined variable 'X' at line N` |
+| `exec.c` – pipeline undefined variable (`apply_transform`) | `Error: Undefined variable 'X'` | `Error: Undefined variable 'X' at line N` |
+| `lexer.c` – unexpected character | `Error: Unexpected character 'X' at line N` | *(unchanged — already had line number)* |
+| `parser.c` – all parse errors | `Error: <message> at line N` | *(unchanged — already had line number via `error()` helper)* |
+
+### Backward-compatibility verification
+
+- All eight existing `.tri` test files were rebuilt and re-run after the change.
+- All **stdout** outputs and **exit codes** are **byte-for-byte identical** to the v0.1.0 baseline.
+- The only **stderr** change is in `tests/test_invalid.tri`: the `"Error: Undefined variable 'print'"` message now reads `"Error: Undefined variable 'print' at line 1"` — the baseline in this document has been updated accordingly.
+- No existing token type, AST node type, or execution path was removed or altered.
+- The `Condition.line` and `Transform.line` fields are zero-initialised; the `Expr.line` field is set to `0` in `create_expr()` and then overwritten to the real token line in `parse_primary()`, so there is no uninitialised-memory risk.

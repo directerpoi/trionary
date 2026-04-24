@@ -17,6 +17,7 @@ typedef struct Expr {
     OpType op;
     struct Expr* left;
     struct Expr* right;
+    int line; /* source line where this expression token was seen */
 } Expr;
 
 SymTable* create_symtable() {
@@ -72,6 +73,11 @@ static double eval_expr(Expr* expr, SymTable* sym) {
             return expr->num_val;
             
         case EXPR_VARIABLE:
+            if (!sym_exists(sym, expr->var_name)) {
+                fprintf(stderr, "Error: Undefined variable '%s' at line %d\n",
+                        expr->var_name, expr->line);
+                return 0.0;
+            }
             return sym_get(sym, expr->var_name);
             
         case EXPR_BINARY: {
@@ -117,7 +123,8 @@ static double apply_transform(double val, Transform* trn, SymTable* sym) {
     double operand;
     if (trn->is_var_ref) {
         if (!sym_exists(sym, trn->var_name)) {
-            fprintf(stderr, "Error: Undefined variable '%s'\n", trn->var_name);
+            fprintf(stderr, "Error: Undefined variable '%s' at line %d\n",
+                    trn->var_name, trn->line);
             exit(1);
         }
         operand = sym_get(sym, trn->var_name);
