@@ -211,11 +211,18 @@ static AssignNode* parse_assign() {
         return node;
     }
 
-    if (!match(TOK_NUMBER)) {
-        error_at(peek().line, "Expected number in assignment");
-        return node;
+    if (match(TOK_NUMBER)) {
+        node->rhs_type = ASSIGN_NUMBER;
+        node->value = atof(tokens[current - 1].lexeme);
+    } else if (match(TOK_IDENT)) {
+        node->rhs_type = ASSIGN_VARIABLE;
+        strncpy(node->rhs_name, tokens[current - 1].lexeme, 63);
+        node->rhs_name[63] = '\0';
+    } else if (match(TOK_INPT)) {
+        node->rhs_type = ASSIGN_INPUT;
+    } else {
+        error_at(peek().line, "Expected number, identifier, or 'inpt' in assignment");
     }
-    node->value = atof(tokens[current - 1].lexeme);
 
     return node;
 }

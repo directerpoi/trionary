@@ -36,9 +36,15 @@ for tri_file in "${SCRIPT_DIR}"/test_*.tri; do
         read -ra extra_args < "${base}.args"
     fi
 
+    # Read optional stdin input
+    stdin_file="/dev/null"
+    if [[ -f "${base}.stdin" ]]; then
+        stdin_file="${base}.stdin"
+    fi
+
     # Run and capture combined stdout + stderr
     tmp=$(mktemp)
-    "${TRI}" run "${tri_file}" "${extra_args[@]}" > "${tmp}" 2>&1 || true
+    "${TRI}" run "${tri_file}" "${extra_args[@]}" < "${stdin_file}" > "${tmp}" 2>&1 || true
 
     if diff -q "${tmp}" "${expected_file}" > /dev/null 2>&1; then
         echo "PASS: ${name}"

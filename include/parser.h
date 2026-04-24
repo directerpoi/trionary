@@ -55,11 +55,19 @@ typedef struct ArithNode {
     int line; /* source line of the expression root */
 } ArithNode;
 
+typedef enum {
+    ASSIGN_NUMBER,   /* a = 42       */
+    ASSIGN_VARIABLE, /* a = arg0     */
+    ASSIGN_INPUT     /* a = inpt     */
+} AssignRHSType;
+
 typedef struct {
-    NodeType type;
-    char name[64];
-    double value;
-    int line; /* source line of the assignment */
+    NodeType      type;
+    char          name[64];
+    double        value;         /* used when rhs_type == ASSIGN_NUMBER   */
+    char          rhs_name[64]; /* used when rhs_type == ASSIGN_VARIABLE */
+    AssignRHSType rhs_type;
+    int           line;
 } AssignNode;
 
 typedef struct {

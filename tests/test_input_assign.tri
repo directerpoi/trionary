@@ -1,0 +1,13 @@
+# Task 6 — Assignment from variable (arg0/arg1) and interactive input (inpt)
+# Run as: ./tri run tests/test_input_assign.tri 10 20
+#
+# Expected output:
+#   10   <- a (= arg0)
+#   20   <- b (= arg1)
+#   30   <- a + b
+
+a = arg0
+b = arg1
+a + b -> emt
+a -> emt
+b -> emt

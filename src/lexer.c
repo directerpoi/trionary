@@ -26,7 +26,8 @@ static int is_keyword(const char* word) {
            strcmp(word, "emt") == 0 ||
            strcmp(word, "fn")  == 0 ||
            strcmp(word, "end") == 0 ||
-           strcmp(word, "use") == 0;
+           strcmp(word, "use") == 0 ||
+           strcmp(word, "inpt") == 0;
 }
 
 static TokenType keyword_type(const char* word) {
@@ -38,6 +39,7 @@ static TokenType keyword_type(const char* word) {
     if (strcmp(word, "fn")  == 0) return TOK_FN;
     if (strcmp(word, "end") == 0) return TOK_END;
     if (strcmp(word, "use") == 0) return TOK_USE;
+    if (strcmp(word, "inpt") == 0) return TOK_INPT;
     return TOK_ERROR;
 }
 

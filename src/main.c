@@ -76,11 +76,13 @@ int main(int argc, char* argv[]) {
         // Start of a new statement
         int start = current;
         
-        // Parse assignment pattern: IDENT = NUMBER
+        // Parse assignment pattern: IDENT = NUMBER | IDENT | inpt
         if (tokens[current].type == TOK_IDENT && 
             current + 2 < token_count && 
             tokens[current + 1].type == TOK_ASSIGN &&
-            tokens[current + 2].type == TOK_NUMBER) {
+            (tokens[current + 2].type == TOK_NUMBER ||
+             tokens[current + 2].type == TOK_IDENT  ||
+             tokens[current + 2].type == TOK_INPT)) {
             current += 3;
         }
         // Parse function definition: fn NAME params... NEWLINE body NEWLINE end

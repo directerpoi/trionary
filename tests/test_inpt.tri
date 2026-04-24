@@ -1,0 +1,9 @@
+# Task 6 — Interactive input using the inpt keyword
+# Pipe stdin: echo -e "10\n20" | ./tri run tests/test_inpt.tri
+#
+# Expected output:
+#   30   <- a + b where a=10, b=20 read from stdin
+
+a = inpt
+b = inpt
+a + b -> emt

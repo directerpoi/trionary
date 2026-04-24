@@ -280,7 +280,28 @@ static void exec_pipeline(PipelineNode* node, SymTable* sym, FuncTable* ft) {
 }
 
 static void exec_assign(AssignNode* node, SymTable* sym) {
-    sym_set(sym, node->name, node->value);
+    double val;
+    switch (node->rhs_type) {
+        case ASSIGN_NUMBER:
+            val = node->value;
+            break;
+        case ASSIGN_VARIABLE:
+            if (!sym_exists(sym, node->rhs_name)) {
+                error_at(node->line, "Undefined variable '%s'", node->rhs_name);
+            }
+            val = sym_get(sym, node->rhs_name);
+            break;
+        case ASSIGN_INPUT: {
+            if (scanf("%lf", &val) != 1) {
+                error_at(node->line, "Failed to read numeric input for '%s'", node->name);
+            }
+            break;
+        }
+        default:
+            val = 0.0;
+            break;
+    }
+    sym_set(sym, node->name, val);
 }
 
 static void exec_fn_def(FnDefNode* node, FuncTable* ft) {

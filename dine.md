@@ -1,3 +1,103 @@
+# v0.3.1 — Assignment Extension (IDENT / inpt RHS): Completion Notes
+
+## What Was Done
+
+Upgraded Trionary to **v0.3.1** by extending the assignment statement to accept three forms on the right-hand side:
+
+| Form | Example | Meaning |
+|------|---------|---------|
+| `IDENT = NUMBER` | `a = 42` | Assign a numeric literal (existing behaviour, unchanged) |
+| `IDENT = IDENT` | `a = arg0` | Assign the current value of another variable (e.g. a CLI argument) |
+| `IDENT = inpt` | `a = inpt` | Read a numeric value from stdin via `scanf` |
+
+---
+
+## Syntax
+
+```
+a = arg0        # copy CLI argument into local variable
+b = arg1
+a + b -> emt    # → sum of the two CLI args
+
+a = inpt        # prompt: reads one double from stdin
+b = inpt
+a + b -> emt    # → sum of the two interactively entered numbers
+```
+
+---
+
+## Changes Made
+
+### Modified Files
+
+| File | Change |
+|------|--------|
+| `include/lexer.h` | Added `TOK_INPT` to `TokenType` |
+| `src/lexer.c` | Added `inpt` to `is_keyword()` and `keyword_type()` |
+| `include/parser.h` | Added `AssignRHSType` enum (`ASSIGN_NUMBER`, `ASSIGN_VARIABLE`, `ASSIGN_INPUT`); added `rhs_type` and `rhs_name` fields to `AssignNode` |
+| `src/parser.c` | Updated `parse_assign()` to accept `TOK_NUMBER` (→ `ASSIGN_NUMBER`), `TOK_IDENT` (→ `ASSIGN_VARIABLE`), or `TOK_INPT` (→ `ASSIGN_INPUT`) after `=` |
+| `src/exec.c` | Updated `exec_assign()` to resolve the three cases: use literal, look up symbol table, or call `scanf` |
+| `src/main.c` | Extended statement-splitting condition to match `IDENT = IDENT` and `IDENT = inpt` in addition to the existing `IDENT = NUMBER` |
+| `tests/run_tests.sh` | Extended test runner to support an optional `test_*.stdin` sidecar file for tests that require stdin input |
+
+### New Files
+
+| File | Purpose |
+|------|---------|
+| `tests/test_input_assign.tri` | Verifies `a = arg0` / `b = arg1` style assignment; run with `./tri run tests/test_input_assign.tri 10 20` → `30 / 10 / 20` |
+| `tests/test_input_assign.args` | CLI args `10 20` for the test runner |
+| `tests/test_input_assign.expected` | Expected output `30 / 10 / 20` |
+| `tests/test_inpt.tri` | Verifies interactive `inpt` keyword; reads two values from stdin and emits their sum |
+| `tests/test_inpt.stdin` | Stdin fixture: `10\n20` |
+| `tests/test_inpt.expected` | Expected output `30` |
+
+---
+
+## Design Decisions
+
+- **Minimal AST change.** `AssignNode` gains two fields (`rhs_type` + `rhs_name[64]`). The existing `value` field is kept for `ASSIGN_NUMBER`; no union was introduced to avoid changing the struct size dramatically. Memory layout remains simple.
+- **`inpt` is a keyword, not a variable.** Treating `inpt` as a reserved keyword (rather than a special variable) ensures it cannot be accidentally shadowed and gives a clean, unambiguous parse path. The lexer emits `TOK_INPT`; the parser matches it in `parse_assign()` and sets `rhs_type = ASSIGN_INPUT`.
+- **`scanf` for interactive input.** Input reading is intentionally numeric-only (reads a `double`). No buffering changes were made; the program blocks on stdin until the user supplies a value followed by a newline. On `scanf` failure (e.g. EOF or non-numeric input), `error_at()` is called with a descriptive message.
+- **No expression-position `inpt`.** Per plan.md constraints, `inpt` is only valid as the RHS of an assignment, not inside arithmetic expressions. This keeps the change minimal and avoids ambiguity in `parse_primary()`.
+- **No behaviour change for existing programs.** All 16 pre-existing tests continue to produce byte-for-byte identical output.
+- **Test runner stdin support.** The runner now redirects from a `test_*.stdin` file when present (using `/dev/null` as the default), making it possible to test `inpt`-using programs without interactive intervention.
+
+---
+
+## Verification
+
+```
+$ make clean && make
+$ ./tri run tests/test_input_assign.tri 10 20   # → 30 / 10 / 20
+$ echo -e "10\n20" | ./tri run tests/test_inpt.tri  # → 30
+$ make test
+# Results: 18 passed, 0 failed
+```
+
+All 18 tests pass on a clean build. No pre-existing test output changed.
+
+---
+
+## Files Touched (summary)
+
+```
+include/lexer.h                  ← TOK_INPT added
+src/lexer.c                      ← inpt keyword
+include/parser.h                 ← AssignRHSType enum; rhs_type/rhs_name in AssignNode
+src/parser.c                     ← parse_assign() handles NUMBER | IDENT | INPT
+src/exec.c                       ← exec_assign() dispatches on rhs_type
+src/main.c                       ← statement splitter accepts IDENT = IDENT | INPT
+tests/run_tests.sh               ← .stdin sidecar support added
+tests/test_input_assign.tri      ← new
+tests/test_input_assign.args     ← new
+tests/test_input_assign.expected ← new
+tests/test_inpt.tri              ← new
+tests/test_inpt.stdin            ← new
+tests/test_inpt.expected         ← new
+```
+
+---
+
 # Task 5 — Module System (Built-in Modules Only): Completion Notes
 
 ## What Was Done
