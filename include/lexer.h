@@ -5,6 +5,7 @@ typedef enum {
     TOK_LST, TOK_WHN, TOK_TRN, TOK_SUM, TOK_EMT,
     TOK_FN,                 /* fn  */
     TOK_END,                /* end */
+    TOK_USE,                /* use */
     TOK_PIPE,               /* |  */
     TOK_ARROW,              /* -> */
     TOK_LBRACK, TOK_RBRACK,

@@ -81,6 +81,12 @@ int main(int argc, char* argv[]) {
             }
             if (tokens[current].type == TOK_END) current++;
         }
+        // Parse use directive: use MODULE_NAME
+        else if (tokens[current].type == TOK_USE) {
+            current++; // consume use
+            if (current < token_count && tokens[current].type == TOK_IDENT)
+                current++; // consume module name
+        }
         // Parse pattern starting with lst: lst [ ... ] | ... emt
         else if (tokens[current].type == TOK_LST) {
             current++; // consume lst
