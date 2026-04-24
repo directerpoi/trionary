@@ -1,108 +1,74 @@
-You are a C compiler engineer and runtime developer.
+You are a C compiler engineer.
 
-I am upgrading my programming language Trionary to v0.3.1 to support input using a keyword: inpt
+I want to upgrade my language Trionary to support input prompts.
 
-Current problem:
-Assignments only accept numeric literals, causing this error:
+---
 
-"Error: Expected number in assignment"
+CURRENT:
+
+inpt a
+
+---
+
+NEW FEATURE:
+
+Support optional prompt string:
+
+inpt a "Enter your age:"
 
 ---
 
 GOAL:
 
-Extend assignment syntax to support:
+Allow syntax:
 
-a = arg0      (CLI input variable)
-a = inpt      (interactive input)
+inpt IDENT [STRING]
 
----
-
-CURRENT DESIGN:
-
-- assignment → IDENT = NUMBER
-- Symbol table exists (sym_get, sym_set)
-- Pipeline system already working
-- CLI arguments are passed as arg0, arg1, ...
+Where STRING is optional.
 
 ---
 
-REQUIRED CHANGES:
+TASKS:
 
-1. Parser Update:
-   Modify assignment rule to:
+1. Lexer:
+   - Support STRING tokens (text inside quotes)
 
-   assignment → IDENT = (NUMBER | IDENT | INPT)
+2. Parser:
+   - Update rule:
+     statement → INPT IDENT [STRING]
 
-   - NUMBER → numeric literal
-   - IDENT → variable (including arg0, arg1)
-   - INPT  → special input keyword
+   - If STRING exists, store it in AST
 
-2. AST Update:
-   Assignment node must store:
-   - type: number | variable | input
-   - value (if number)
-   - variable name (if IDENT)
-   - flag for input (if INPT)
+3. AST:
+   - Extend input node:
+     - variable name
+     - optional prompt string
 
-3. Execution Update:
-   When executing assignment:
+4. Execution:
 
-   if NUMBER → use literal
-   if IDENT  → resolve from symbol table
-   if INPT   → read from stdin (scanf)
+   When executing:
+   inpt a "Enter age:"
+
+   Do:
+   if prompt exists:
+       print prompt
+   read input (scanf)
+   store value in symbol table
 
 ---
 
 CONSTRAINTS:
 
 - DO NOT break existing syntax
-- DO NOT add complex expression parsing
-- Keep input numeric only
+- STRING only used for prompt (no full string system)
 - Keep implementation minimal
-- Maintain performance
-
----
-
-EXPECTED BEHAVIOR:
-
-Example 1 (CLI input):
-
-a = arg0
-b = arg1
-a + b -> emt
-
-Command:
-./tri run file.tri 10 20
-
-Output:
-30
-
----
-
-Example 2 (interactive input):
-
-a = inpt
-b = inpt
-a + b -> emt
-
-User enters:
-10
-20
-
-Output:
-30
+- Input remains numeric
 
 ---
 
 OUTPUT REQUIRED:
 
-1. Updated parser logic for assignment
-2. Updated AST structure (minimal change)
-3. Updated execution logic (input handling)
-4. Any necessary token additions (INPT)
-5. Minimal code snippets only
-
----
-
-Now provide the exact minimal implementation changes.
+1. Lexer change for STRING
+2. Parser update for optional STRING
+3. AST modification
+4. Execution code for prompt + input
