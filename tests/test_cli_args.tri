@@ -1,0 +1,19 @@
+# Task 6 — CLI Input Improvements
+# Run as: ./tri run tests/test_cli_args.tri 7 3
+#
+# Expected output:
+#   2          <- argc (number of script args)
+#   7          <- arg0 as-is
+#   3          <- arg1 as-is
+#   10         <- arg0 + arg1 (auto-coerced to number)
+#   14         <- arg0 * 2
+#   99         <- arg2 ?? 99 (arg2 absent, fallback used)
+#   7          <- arg0 ?? 0 (arg0 present, its value returned)
+
+argc -> emt
+arg0 -> emt
+arg1 -> emt
+arg0 + arg1 -> emt
+arg0 * 2 -> emt
+arg2 ?? 99 -> emt
+arg0 ?? 0 -> emt

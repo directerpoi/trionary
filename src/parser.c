@@ -158,6 +158,26 @@ static Expr* parse_expr() {
     return left;
 }
 
+/* Lowest-precedence expression: handles the ?? (coalesce) operator.
+   left ?? right — evaluates to left if left is a defined variable,
+   otherwise evaluates to right.  Right-associative. */
+static Expr* parse_coalesce() {
+    Expr* left = parse_expr();
+
+    if (current < token_count && peek().type == TOK_COALESCE) {
+        int coalesce_line = peek().line;
+        advance(); /* consume ?? */
+        Expr* right = parse_coalesce(); /* right-associative */
+        Expr* expr = create_expr(EXPR_COALESCE);
+        expr->left  = left;
+        expr->right = right;
+        expr->line  = coalesce_line;
+        return expr;
+    }
+
+    return left;
+}
+
 void free_expr(Expr* expr) {
     if (!expr) return;
     if (expr->type == EXPR_BINARY) {
@@ -166,6 +186,9 @@ void free_expr(Expr* expr) {
     } else if (expr->type == EXPR_CALL) {
         for (int i = 0; i < expr->arg_count; i++)
             free_expr(expr->args[i]);
+    } else if (expr->type == EXPR_COALESCE) {
+        free_expr(expr->left);
+        free_expr(expr->right);
     }
     free(expr);
 }
@@ -280,7 +303,7 @@ static PipelineNode* parse_pipeline(int lst_line) {
             trn->op_lexeme[3] = '\0';
             trn->op = get_op_type(trn->op_lexeme);
             trn->line = trn_line;
-            trn->expr = parse_expr();
+            trn->expr = parse_coalesce();
 
             if (!trn->expr) {
                 error_at(peek().line, "Expected expression after transform operator");
@@ -346,7 +369,7 @@ static FnDefNode* parse_fn_def() {
     while (match(TOK_NEWLINE)) {}
 
     /* Body is a single arithmetic expression. */
-    node->body = parse_expr();
+    node->body = parse_coalesce();
 
     /* Skip trailing newlines before 'end'. */
     while (match(TOK_NEWLINE)) {}
@@ -401,7 +424,7 @@ ASTNode* parse(Token* tok, int count) {
         ast->node.assign = parse_assign();
     } else if (tokens[0].type == TOK_NUMBER || tokens[0].type == TOK_IDENT) {
         ast->stmt_type = STMT_ARITH;
-        ast->node.arith = (ArithNode*)parse_expr();
+        ast->node.arith = (ArithNode*)parse_coalesce();
 
         if (match(TOK_ARROW)) {
             if (!match(TOK_EMT)) {

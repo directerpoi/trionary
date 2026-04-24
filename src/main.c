@@ -12,7 +12,7 @@ void print_usage(const char* prog_name) {
 }
 
 int main(int argc, char* argv[]) {
-    if (argc != 3) {
+    if (argc < 3) {
         print_usage(argv[0]);
         return 1;
     }
@@ -44,6 +44,18 @@ int main(int argc, char* argv[]) {
 
     SymTable* sym = create_symtable();
     FuncTable* ft = create_functable();
+
+    /* Register CLI arguments as built-in variables.
+       argv[3..] become arg0, arg1, … in the script.
+       All values are auto-coerced to double via atof().
+       argc holds the count of script arguments (not counting tri/run/<file>). */
+    int script_argc = argc - 3;
+    sym_set(sym, "argc", (double)script_argc);
+    for (int i = 0; i < script_argc; i++) {
+        char argname[32];
+        snprintf(argname, sizeof(argname), "arg%d", i);
+        sym_set(sym, argname, atof(argv[3 + i]));
+    }
 
     /* Multi-pipeline loop: each iteration extracts one statement (assignment,
        arithmetic emit, full lst…emt pipeline, or fn…end function definition)

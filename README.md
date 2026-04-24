@@ -69,18 +69,20 @@ make clean
 ## Usage
 
 ```
-tri run <file.tri>
+tri run <file.tri> [arg0 arg1 ...]
 ```
 
 | Argument | Description |
 |----------|-------------|
 | `run` | Execute a Trionary source file |
 | `<file.tri>` | Path to the source file |
+| `arg0 arg1 …` | Optional script arguments (accessible inside the script as `arg0`, `arg1`, …) |
 
 **Example:**
 
 ```bash
 tri run tests/demo.tri
+tri run tests/test_cli_args.tri 7 3
 ```
 
 ---
@@ -189,6 +191,34 @@ Or, when using `sum` as the final reduction stage:
 lst [values] | stage | stage | sum
 emt
 ```
+
+### CLI Input
+
+Arguments passed after the file name are available as `arg0`, `arg1`, … inside the script. They are automatically coerced to numbers. The built-in variable `argc` holds the count of script arguments.
+
+```bash
+tri run my_script.tri 10 20
+```
+
+Inside `my_script.tri`:
+
+```tri
+argc -> emt          # 2  (number of arguments)
+arg0 -> emt          # 10 (first argument)
+arg1 -> emt          # 20 (second argument)
+arg0 + arg1 -> emt   # 30 (arithmetic with auto-coerced values)
+```
+
+#### Default values with `??`
+
+The `??` operator returns its left operand if it is a defined variable, and the right operand (fallback) otherwise. This is useful when an argument may or may not be supplied:
+
+```tri
+arg0 ?? 1 -> emt     # arg0 if provided, else 1
+arg1 ?? 0 -> emt     # arg1 if provided, else 0
+```
+
+`??` is right-associative and has lower precedence than all arithmetic operators.
 
 ---
 
@@ -342,6 +372,22 @@ The following v0.1.0 behaviours are **unchanged** in v0.2.0:
 - `assign_stmt` still accepts only `IDENT = NUMBER` (literal number on the right-hand side).
 - Errors continue going to `stderr`; normal output goes to `stdout`.
 - All v0.1.0 regression test files produce byte-for-byte identical stdout, stderr, and exit codes.
+
+---
+
+### v0.3.0 (Task 6 — CLI Input Improvements)
+
+#### New Features
+
+| # | Feature | Description |
+|---|---------|-------------|
+| 1 | **CLI argument variables** | Arguments passed after the file name (`tri run <file> arg0 arg1 …`) are automatically registered as numeric variables `arg0`, `arg1`, … in the global scope. Values are coerced to `double` via `atof()`. |
+| 2 | **`argc` built-in variable** | The read-only variable `argc` always holds the count of script arguments (i.e. `argv` entries after `<file>`). When no extra arguments are given, `argc` is `0`. |
+| 3 | **`??` default-value operator** | `expr ?? fallback` evaluates to `expr` if its left-hand side is a defined variable, and to `fallback` otherwise. Useful for optional CLI arguments: `arg0 ?? 1`. Operator is right-associative with lower precedence than all arithmetic operators. |
+
+#### Backward Compatibility
+
+All v0.2 programs continue to run without change. The `argc` variable is now always defined (value `0` when no extra arguments are supplied), so it is reserved and should not be used as a user variable name. Existing programs that do not reference `argc` or `arg0`…`argN` are completely unaffected.
 
 ---
 
