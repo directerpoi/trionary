@@ -648,3 +648,61 @@ Error: Expected number or variable after transform operator at line 3
 - All eight existing `.tri` test files (`test_arith.tri`, `test_vars.tri`, `test_pipeline.tri`, `test_all.tri`, `demo.tri`, `test_error.tri`, `test_invalid.tri`, `test_malformed.tri`) were re-run after adding the new files.
 - Every file produced **byte-for-byte identical** stdout, stderr, and exit code to the baseline recorded in Section 8.
 - No source file was modified; this step adds test data only.
+
+---
+
+## 17. What Was Done (Step 8 Summary)
+
+**Goal:** Execute `tri run` against every existing test in `tests/` and confirm that all outputs are byte-for-byte identical to the v0.1.0 results recorded in Section 8 of this document.
+
+### Method
+
+1. Rebuilt the binary from source: `make clean && make` — clean build, zero errors (one pre-existing `fread` warning in `reader.c`, unrelated to any v0.2.0 change).
+2. Executed `./tri run <file>` for each of the eight baseline test files, capturing stdout, stderr, and the exit code separately.
+3. Compared each result against the expected values recorded in **Section 8** of this document.
+
+### Results
+
+| Test file | stdout match | stderr match | exit match | Status |
+|-----------|:---:|:---:|:---:|:------:|
+| `tests/test_arith.tri` | ✅ | ✅ | ✅ | **PASS** |
+| `tests/test_vars.tri` | ✅ | ✅ | ✅ | **PASS** |
+| `tests/test_pipeline.tri` | ✅ | ✅ | ✅ | **PASS** |
+| `tests/test_all.tri` | ✅ | ✅ | ✅ | **PASS** |
+| `tests/demo.tri` | ✅ | ✅ | ✅ | **PASS** |
+| `tests/test_error.tri` | ✅ | ✅ | ✅ | **PASS** |
+| `tests/test_invalid.tri` | ✅ | ✅ | ✅ | **PASS** |
+| `tests/test_malformed.tri` | ✅ | ✅ | ✅ | **PASS** |
+
+**All 8 tests passed. No deviations detected.**
+
+### Observed outputs (verbatim)
+
+#### `tests/test_arith.tri`
+**stdout:** `15` / `14`  **stderr:** *(empty)*  **exit:** 0
+
+#### `tests/test_vars.tri`
+**stdout:** `15` / `70`  **stderr:** *(empty)*  **exit:** 0
+
+#### `tests/test_pipeline.tri`
+**stdout:** `120`  **stderr:** *(empty)*  **exit:** 0
+
+#### `tests/test_all.tri`
+**stdout:** `14` `4` `50` `6` `7` `8` `9` `10` `20` `30` `40` `15` `30` `40` `50`  **stderr:** *(empty)*  **exit:** 0
+
+#### `tests/demo.tri`
+**stdout:** `15` `14` `80` `6` `7` `8` `9` `10` `12` `14` `16` `18` `20` `15` `120`  **stderr:** *(empty)*  **exit:** 0
+
+#### `tests/test_error.tri`
+**stdout:** `15`  **stderr:** *(empty)*  **exit:** 0
+
+#### `tests/test_invalid.tri`
+**stdout:** `0`  
+**stderr:** `Error: Unexpected character '"' at line 1` / `Error: Undefined variable 'print' at line 1`  **exit:** 0
+
+#### `tests/test_malformed.tri`
+**stdout:** `15`  **stderr:** *(empty)*  **exit:** 0
+
+### Conclusion
+
+No blocker. All eight regression tests produced **byte-for-byte identical** stdout, stderr, and exit codes to the v0.1.0 baseline. The implementation is clear to proceed to Step 9.
