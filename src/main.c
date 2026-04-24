@@ -6,20 +6,43 @@
 #include "parser.h"
 #include "exec.h"
 
-void print_usage(const char* prog_name) {
-    fprintf(stderr, "Usage: %s run <file.tri>\n", prog_name);
-    fprintf(stderr, "  Executes a Trionary v0.3.0 source file.\n");
+#define TRI_VERSION "Trionary v0.3.2"
+
+void print_help(const char* prog_name) {
+    printf("Usage: %s <command> [arguments]\n\n", prog_name);
+    printf("Commands:\n");
+    printf("  run <file.tri> [arg0 arg1 ...]   Execute a Trionary source file\n");
+    printf("  help                             Show this help message\n");
+    printf("  version                          Print the interpreter version\n");
+    printf("\nExamples:\n");
+    printf("  %s run script.tri\n", prog_name);
+    printf("  %s run script.tri 10 20\n", prog_name);
 }
 
 int main(int argc, char* argv[]) {
-    if (argc < 3) {
-        print_usage(argv[0]);
-        return 1;
+    /* Handle no-argument invocation and global flags */
+    if (argc < 2 ||
+        strcmp(argv[1], "help") == 0 ||
+        strcmp(argv[1], "--help") == 0 ||
+        strcmp(argv[1], "-h") == 0) {
+        print_help(argv[0]);
+        return 0;
+    }
+
+    if (strcmp(argv[1], "version") == 0) {
+        printf("%s\n", TRI_VERSION);
+        return 0;
     }
 
     if (strcmp(argv[1], "run") != 0) {
         fprintf(stderr, "Error: Unknown command '%s'\n", argv[1]);
-        print_usage(argv[0]);
+        print_help(argv[0]);
+        return 1;
+    }
+
+    if (argc < 3) {
+        fprintf(stderr, "Error: 'run' requires a file argument.\n");
+        fprintf(stderr, "  Usage: %s run <file.tri> [arg0 arg1 ...]\n", argv[0]);
         return 1;
     }
 
