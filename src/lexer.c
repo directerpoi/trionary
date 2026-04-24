@@ -189,6 +189,24 @@ Token* tokenise(const char* src, int* count) {
             continue;
         }
 
+        // String literals (used for inpt prompts)
+        if (src[i] == '"') {
+            char str[64];
+            int si = 0;
+            i++; /* skip opening quote */
+            while (src[i] != '"' && src[i] != '\0' && src[i] != '\n' && si < 63) {
+                str[si++] = src[i++];
+            }
+            if (src[i] != '"') {
+                error_at(line, "Unterminated string literal");
+            } else {
+                i++; /* skip closing quote */
+            }
+            str[si] = '\0';
+            tokens[n++] = make_token(TOK_STRING, str);
+            continue;
+        }
+
         // Unknown character
         error_at(line, "Unexpected character '%c'", src[i]);
     }

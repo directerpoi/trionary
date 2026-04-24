@@ -11,7 +11,8 @@ typedef enum {
     NODE_PIPELINE, /* lst | whn | trn | sum */
     NODE_EMT,      /* emit / output         */
     NODE_FN_DEF,   /* function definition   */
-    NODE_USE       /* use <module> directive */
+    NODE_USE,      /* use <module> directive */
+    NODE_INPT      /* standalone inpt statement */
 } NodeType;
 
 typedef enum {
@@ -114,6 +115,15 @@ typedef struct {
     int      line;
 } UseStmtNode;
 
+/* standalone inpt statement: inpt IDENT [STRING] */
+typedef struct {
+    NodeType type;
+    char     var_name[64];  /* variable to store the input value */
+    char     prompt[64];    /* optional prompt string */
+    int      has_prompt;    /* 1 if a prompt string was provided */
+    int      line;
+} InptNode;
+
 typedef struct {
     NodeType type;
     union {
@@ -122,8 +132,9 @@ typedef struct {
         PipelineNode* pipeline;
         FnDefNode* fn_def;
         UseStmtNode* use_stmt;
+        InptNode* inpt;
     } node;
-    enum { STMT_EMTPY, STMT_ARITH, STMT_ASSIGN, STMT_PIPELINE, STMT_FN_DEF, STMT_USE } stmt_type;
+    enum { STMT_EMTPY, STMT_ARITH, STMT_ASSIGN, STMT_PIPELINE, STMT_FN_DEF, STMT_USE, STMT_INPT } stmt_type;
 } ASTNode;
 
 ASTNode* parse(Token* tokens, int token_count);

@@ -304,6 +304,18 @@ static void exec_assign(AssignNode* node, SymTable* sym) {
     sym_set(sym, node->name, val);
 }
 
+static void exec_inpt(InptNode* node, SymTable* sym) {
+    if (node->has_prompt) {
+        printf("%s", node->prompt);
+        fflush(stdout);
+    }
+    double val;
+    if (scanf("%lf", &val) != 1) {
+        error_at(node->line, "Failed to read numeric input for '%s'", node->var_name);
+    }
+    sym_set(sym, node->var_name, val);
+}
+
 static void exec_fn_def(FnDefNode* node, FuncTable* ft) {
     if (ft->count >= MAX_FUNCS) {
         error_at(node->line, "Function table full: cannot define '%s'", node->name);
@@ -359,6 +371,10 @@ void execute(ASTNode* ast, SymTable* sym, FuncTable* ft) {
 
         case STMT_USE:
             exec_use_stmt(ast->node.use_stmt, ft);
+            break;
+
+        case STMT_INPT:
+            exec_inpt(ast->node.inpt, sym);
             break;
             
         case STMT_EMTPY:

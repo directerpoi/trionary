@@ -101,6 +101,14 @@ int main(int argc, char* argv[]) {
             if (current < token_count && tokens[current].type == TOK_IDENT)
                 current++; // consume module name
         }
+        // Parse standalone inpt statement: inpt IDENT [STRING]
+        else if (tokens[current].type == TOK_INPT) {
+            current++; // consume inpt
+            if (current < token_count && tokens[current].type == TOK_IDENT)
+                current++; // consume identifier
+            if (current < token_count && tokens[current].type == TOK_STRING)
+                current++; // consume optional prompt string
+        }
         // Parse pattern starting with lst: lst [ ... ] | ... emt
         else if (tokens[current].type == TOK_LST) {
             current++; // consume lst

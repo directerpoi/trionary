@@ -409,6 +409,36 @@ static UseStmtNode* parse_use_stmt() {
     return node;
 }
 
+static InptNode* parse_inpt_stmt() {
+    InptNode* node = malloc(sizeof(InptNode));
+    node->type = NODE_INPT;
+    node->has_prompt = 0;
+    node->prompt[0] = '\0';
+    node->var_name[0] = '\0';
+
+    if (!match(TOK_INPT)) {
+        error_at(peek().line, "Expected 'inpt'");
+        return node;
+    }
+    node->line = tokens[current - 1].line;
+
+    if (!match(TOK_IDENT)) {
+        error_at(peek().line, "Expected identifier after 'inpt'");
+        return node;
+    }
+    strncpy(node->var_name, tokens[current - 1].lexeme, 63);
+    node->var_name[63] = '\0';
+
+    if (peek().type == TOK_STRING) {
+        advance();
+        strncpy(node->prompt, tokens[current - 1].lexeme, 63);
+        node->prompt[63] = '\0';
+        node->has_prompt = 1;
+    }
+
+    return node;
+}
+
 ASTNode* parse(Token* tok, int count) {
     /* Reset all parser state so that consecutive calls (one per pipeline or
        statement) do not inherit position or token-stream pointer from the
@@ -457,6 +487,9 @@ ASTNode* parse(Token* tok, int count) {
     } else if (tokens[0].type == TOK_USE) {
         ast->stmt_type = STMT_USE;
         ast->node.use_stmt = parse_use_stmt();
+    } else if (tokens[0].type == TOK_INPT) {
+        ast->stmt_type = STMT_INPT;
+        ast->node.inpt = parse_inpt_stmt();
     } else {
         error_at(tokens[0].line, "Expected lst, identifier, or number");
     }
@@ -489,6 +522,8 @@ void free_ast(ASTNode* ast) {
         free(ast->node.fn_def);
     } else if (ast->stmt_type == STMT_USE) {
         free(ast->node.use_stmt);
+    } else if (ast->stmt_type == STMT_INPT) {
+        free(ast->node.inpt);
     }
     
     free(ast);

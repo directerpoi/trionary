@@ -1,0 +1,9 @@
+# Test standalone inpt with optional prompt string
+# Pipe stdin: echo -e "10\n20" | ./tri run tests/test_inpt_prompt.tri
+#
+# Expected output:
+#   Enter a: Enter b: 30   <- prompts printed, then a+b emitted
+
+inpt a "Enter a: "
+inpt b "Enter b: "
+a + b -> emt
