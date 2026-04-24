@@ -6,5 +6,8 @@ TARGET  = tri
 $(TARGET): $(SRCS)
 	$(CC) $(CFLAGS) $(SRCS) -o $(TARGET) -lm
 
+test: $(TARGET)
+	bash tests/run_tests.sh
+
 clean:
 	rm -f $(TARGET)

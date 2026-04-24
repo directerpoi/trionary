@@ -534,3 +534,125 @@ src/main.c                 ← argc check relaxed; arg0..argN and argc registere
 README.md                  ← Usage, Language Reference, and Changelog updated
 tests/test_cli_args.tri    ← new
 ```
+
+---
+
+# Task 7 — Regression Test Suite & CI Script: Completion Notes
+
+## What Was Done
+
+Task 7 from `plan.md` has been implemented in full. The goal was to create an automated regression test runner that verifies all v0.2 programs and v0.3 features produce the expected output, and to wire it into the build system via `make test`.
+
+---
+
+## How the Test Runner Works
+
+```
+make test
+```
+
+The `make test` target builds `tri` (if needed) then invokes `bash tests/run_tests.sh`.
+
+`run_tests.sh` iterates over every `tests/test_*.tri` file and:
+1. Skips the file if no matching `tests/test_*.expected` file exists.
+2. Reads an optional `tests/test_*.args` file (one line, space-separated) and passes those tokens as extra CLI arguments to `./tri run`.
+3. Runs `./tri run <file> [extra-args]`, capturing **combined stdout + stderr** into a temp file.
+4. Diffs the temp file against the `.expected` file; prints `PASS` or `FAIL` accordingly.
+5. Reports a summary (`N passed, M failed`) and exits non-zero if any test failed.
+
+---
+
+## Changes Made
+
+### Modified Files
+
+| File | Change |
+|------|--------|
+| `Makefile` | Added `test` target: `bash tests/run_tests.sh` (depends on `$(TARGET)`) |
+
+### New Files
+
+| File | Purpose |
+|------|---------|
+| `tests/run_tests.sh` | Test runner script (executable); iterates `test_*.tri`, diffs against `.expected`, reports PASS/FAIL |
+| `tests/test_all.expected` | Expected output for `test_all.tri` |
+| `tests/test_arith.expected` | Expected output for `test_arith.tri` |
+| `tests/test_cli_args.args` | Extra CLI args (`7 3`) to pass when running `test_cli_args.tri` |
+| `tests/test_cli_args.expected` | Expected output for `test_cli_args.tri` (run with `7 3`) |
+| `tests/test_error.expected` | Expected output for `test_error.tri` |
+| `tests/test_fn.expected` | Expected output for `test_fn.tri` |
+| `tests/test_invalid.expected` | Expected output (error message) for `test_invalid.tri` |
+| `tests/test_malformed.expected` | Expected output for `test_malformed.tri` |
+| `tests/test_malformed_trn.expected` | Expected output (error message) for `test_malformed_trn.tri` |
+| `tests/test_mixed_arith_pipeline.expected` | Expected output for `test_mixed_arith_pipeline.tri` |
+| `tests/test_modules.expected` | Expected output for `test_modules.tri` |
+| `tests/test_multi_pipeline.expected` | Expected output for `test_multi_pipeline.tri` |
+| `tests/test_pipeline.expected` | Expected output for `test_pipeline.tri` |
+| `tests/test_trn_expr.expected` | Expected output for `test_trn_expr.tri` |
+| `tests/test_trn_undef.expected` | Expected output (error message) for `test_trn_undef.tri` |
+| `tests/test_trn_var.expected` | Expected output for `test_trn_var.tri` |
+| `tests/test_vars.expected` | Expected output for `test_vars.tri` |
+
+---
+
+## Design Decisions
+
+- **Combined stdout + stderr capture.** Error-case tests emit their diagnostic to stderr; merging both streams into the `.expected` file means both the error message and any partial output are verified in one diff.
+- **`.args` sidecar file.** Tests that require extra CLI arguments (e.g. `test_cli_args.tri`) carry a `test_*.args` file with a single space-separated line. The runner reads it with `read -ra` so each token becomes a separate argument, preserving correct quoting semantics.
+- **Skip instead of fail.** Tests without a `.expected` file are skipped (not failed). This makes it safe to add new `.tri` files before their expected output is known.
+- **No behaviour change.** No source files were modified; the test infrastructure is purely additive.
+
+---
+
+## Verification
+
+```
+$ make clean && make
+$ make test
+PASS: test_all.tri
+PASS: test_arith.tri
+PASS: test_cli_args.tri
+PASS: test_error.tri
+PASS: test_fn.tri
+PASS: test_invalid.tri
+PASS: test_malformed.tri
+PASS: test_malformed_trn.tri
+PASS: test_mixed_arith_pipeline.tri
+PASS: test_modules.tri
+PASS: test_multi_pipeline.tri
+PASS: test_pipeline.tri
+PASS: test_trn_expr.tri
+PASS: test_trn_undef.tri
+PASS: test_trn_var.tri
+PASS: test_vars.tri
+
+Results: 16 passed, 0 failed
+```
+
+All 16 tests pass on a clean build. No pre-existing test output changed.
+
+---
+
+## Files Touched (summary)
+
+```
+Makefile                              ← test target added
+tests/run_tests.sh                    ← new (executable)
+tests/test_all.expected               ← new
+tests/test_arith.expected             ← new
+tests/test_cli_args.args              ← new
+tests/test_cli_args.expected          ← new
+tests/test_error.expected             ← new
+tests/test_fn.expected                ← new
+tests/test_invalid.expected           ← new
+tests/test_malformed.expected         ← new
+tests/test_malformed_trn.expected     ← new
+tests/test_mixed_arith_pipeline.expected ← new
+tests/test_modules.expected           ← new
+tests/test_multi_pipeline.expected    ← new
+tests/test_pipeline.expected          ← new
+tests/test_trn_expr.expected          ← new
+tests/test_trn_undef.expected         ← new
+tests/test_trn_var.expected           ← new
+tests/test_vars.expected              ← new
+```
