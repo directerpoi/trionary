@@ -1,0 +1,10 @@
+=== test_arith.tri ===
+15
+14
+
+=== test_vars.tri ===
+15
+70
+
+=== test_pipeline.tri ===
+120

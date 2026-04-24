@@ -1,0 +1,3 @@
+Error: Unexpected character '"' at line 1
+Error: Undefined variable 'print'
+0

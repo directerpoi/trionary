@@ -1,0 +1,24 @@
+# Trionary v0 Demo Program
+
+# Basic arithmetic with operator precedence
+10 + 5 -> emt
+3 * 4 + 2 -> emt
+
+# Variable usage
+price = 100
+discount = 20
+price - discount -> emt
+
+# Pipeline: filter numbers greater than 5
+lst [1,2,3,4,5,6,7,8,9,10] | whn >5 -> emt
+
+# Pipeline: double numbers greater than 5
+lst [1,2,3,4,5,6,7,8,9,10] | whn >5 | trn *2 -> emt
+
+# Pipeline: sum of all numbers
+lst [1,2,3,4,5] | sum -> emt
+
+# Complex pipeline: filter, transform, sum
+# (3+4+5) * 10 = 120
+lst [1,2,3,4,5] | whn >2 | trn *10 | sum
+emt
