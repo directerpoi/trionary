@@ -1,0 +1,44 @@
+# Task 4: Function declarations and calls
+#
+# Syntax:
+#   fn name p1 p2 ...
+#     expression
+#   end
+#
+# Functions may be called inside arithmetic expressions and pipeline stages.
+
+# ---- Test A: basic two-parameter function ----
+# add(x, y) = x + y
+# add(3, 4) → 7
+fn add x y
+  x + y
+end
+add 3 4 -> emt
+
+# ---- Test B: function called with variable arguments ----
+# mul(x, y) = x * y
+# p=6, q=7 → mul(6,7) = 42
+fn mul x y
+  x * y
+end
+p = 6
+q = 7
+mul p q -> emt
+
+# ---- Test C: single-parameter function in arithmetic emit ----
+# inc(n) = n + 1
+# inc(9) → 10
+fn inc n
+  n + 1
+end
+inc 9 -> emt
+
+# ---- Test D: function called inside a pipeline transform ----
+# square(n) = n * n
+# trn + square(x) where x=3 → element + 9
+# [1,2,3] | trn + square x → 10, 11, 12
+fn square n
+  n * n
+end
+x = 3
+lst [1,2,3] | trn + square x -> emt

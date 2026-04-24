@@ -51,23 +51,60 @@ static Expr* create_expr(ExprType type) {
 
 static Expr* parse_primary() {
     Expr* expr;
-    
+
     if (match(TOK_NUMBER)) {
         expr = create_expr(EXPR_NUMBER);
         expr->num_val = atof(tokens[current - 1].lexeme);
         expr->line = tokens[current - 1].line;
-    } else if (match(TOK_IDENT) || match(TOK_VAR_REF)) {
-        expr = create_expr(EXPR_VARIABLE);
-        strncpy(expr->var_name, tokens[current - 1].lexeme, 63);
-        expr->var_name[63] = '\0';
-        expr->line = tokens[current - 1].line;
+    } else if (peek().type == TOK_IDENT || peek().type == TOK_VAR_REF) {
+        TokenType matched_type = peek().type;
+        advance();
+        int name_line = tokens[current - 1].line;
+        char name[64];
+        strncpy(name, tokens[current - 1].lexeme, 63);
+        name[63] = '\0';
+
+        /* Function call: plain IDENT (not VAR_REF) followed by one or more
+           NUMBER/IDENT arguments.  VAR_REF tokens are always variable refs
+           because they follow an operator character without whitespace. */
+        if (matched_type == TOK_IDENT &&
+            current < token_count &&
+            (peek().type == TOK_NUMBER || peek().type == TOK_IDENT)) {
+            expr = create_expr(EXPR_CALL);
+            strncpy(expr->var_name, name, 63);
+            expr->var_name[63] = '\0';
+            expr->arg_count = 0;
+            expr->line = name_line;
+
+            while (expr->arg_count < MAX_PARAMS &&
+                   current < token_count &&
+                   (peek().type == TOK_NUMBER || peek().type == TOK_IDENT)) {
+                advance();
+                Expr* arg;
+                if (tokens[current - 1].type == TOK_NUMBER) {
+                    arg = create_expr(EXPR_NUMBER);
+                    arg->num_val = atof(tokens[current - 1].lexeme);
+                } else {
+                    arg = create_expr(EXPR_VARIABLE);
+                    strncpy(arg->var_name, tokens[current - 1].lexeme, 63);
+                    arg->var_name[63] = '\0';
+                }
+                arg->line = tokens[current - 1].line;
+                expr->args[expr->arg_count++] = arg;
+            }
+        } else {
+            expr = create_expr(EXPR_VARIABLE);
+            strncpy(expr->var_name, name, 63);
+            expr->var_name[63] = '\0';
+            expr->line = name_line;
+        }
     } else {
         error_at(peek().line, "Expected number or identifier");
         expr = create_expr(EXPR_NUMBER);
         expr->num_val = 0;
         expr->line = peek().line;
     }
-    
+
     return expr;
 }
 
@@ -121,11 +158,14 @@ static Expr* parse_expr() {
     return left;
 }
 
-static void free_expr(Expr* expr) {
+void free_expr(Expr* expr) {
     if (!expr) return;
     if (expr->type == EXPR_BINARY) {
         free_expr(expr->left);
         free_expr(expr->right);
+    } else if (expr->type == EXPR_CALL) {
+        for (int i = 0; i < expr->arg_count; i++)
+            free_expr(expr->args[i]);
     }
     free(expr);
 }
@@ -270,6 +310,54 @@ static PipelineNode* parse_pipeline(int lst_line) {
     return node;
 }
 
+static FnDefNode* parse_fn_def() {
+    FnDefNode* node = malloc(sizeof(FnDefNode));
+    node->type = NODE_FN_DEF;
+    node->param_count = 0;
+    node->body = NULL;
+
+    if (!match(TOK_FN)) {
+        error_at(peek().line, "Expected 'fn'");
+        return node;
+    }
+    node->line = tokens[current - 1].line;
+
+    if (!match(TOK_IDENT)) {
+        error_at(peek().line, "Expected function name after 'fn'");
+        return node;
+    }
+    strncpy(node->name, tokens[current - 1].lexeme, 63);
+    node->name[63] = '\0';
+
+    /* Collect parameter names — all IDENT tokens on the same line as 'fn'. */
+    while (peek().type == TOK_IDENT && node->param_count < MAX_PARAMS) {
+        advance();
+        strncpy(node->params[node->param_count], tokens[current - 1].lexeme, 63);
+        node->params[node->param_count][63] = '\0';
+        node->param_count++;
+    }
+
+    /* Expect the newline that separates parameters from the body. */
+    if (!match(TOK_NEWLINE)) {
+        error_at(peek().line, "Expected newline after parameter list in 'fn'");
+        return node;
+    }
+    /* Skip any additional blank lines before the body. */
+    while (match(TOK_NEWLINE)) {}
+
+    /* Body is a single arithmetic expression. */
+    node->body = parse_expr();
+
+    /* Skip trailing newlines before 'end'. */
+    while (match(TOK_NEWLINE)) {}
+
+    if (!match(TOK_END)) {
+        error_at(peek().line, "Expected 'end' after function body");
+    }
+
+    return node;
+}
+
 ASTNode* parse(Token* tok, int count) {
     /* Reset all parser state so that consecutive calls (one per pipeline or
        statement) do not inherit position or token-stream pointer from the
@@ -312,6 +400,9 @@ ASTNode* parse(Token* tok, int count) {
                 }
             }
         }
+    } else if (tokens[0].type == TOK_FN) {
+        ast->stmt_type = STMT_FN_DEF;
+        ast->node.fn_def = parse_fn_def();
     } else {
         error_at(tokens[0].line, "Expected lst, identifier, or number");
     }
@@ -337,6 +428,11 @@ void free_ast(ASTNode* ast) {
             free(ast->node.pipeline->transforms);
         }
         free(ast->node.pipeline);
+    } else if (ast->stmt_type == STMT_FN_DEF) {
+        /* Body ownership is transferred to FuncTable (cloned there);
+           free the original body and the node itself. */
+        free_expr(ast->node.fn_def->body);
+        free(ast->node.fn_def);
     }
     
     free(ast);

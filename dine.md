@@ -1,3 +1,94 @@
+# Task 4 — Function System (Declaration & Call): Completion Notes
+
+## What Was Done
+
+Task 4 from `plan.md` has been implemented in full. The goal was to introduce named, pure functions with positional parameters and a single-expression body, callable inside arithmetic expressions and pipeline stages.
+
+---
+
+## Syntax
+
+```
+fn add x y
+  x + y
+end
+```
+
+- `fn` opens the definition; the function name and zero or more parameter names follow on the **same line**.
+- A **newline** separates the parameter list from the body expression.
+- The **body** is a single arithmetic expression (may reference parameters and any previously-defined variables).
+- `end` closes the definition.
+- Functions are called as `name arg1 arg2 …` wherever a primary expression is expected.
+
+---
+
+## Changes Made
+
+### Modified Files
+
+| File | Change |
+|------|--------|
+| `include/lexer.h` | Added `TOK_FN`, `TOK_END`, and `TOK_NEWLINE` to `TokenType` |
+| `src/lexer.c` | Added `fn` / `end` to `is_keyword()` and `keyword_type()`; moved `\n` handling out of `skip_whitespace_and_comments` so that `TOK_NEWLINE` tokens are emitted (used as the param/body separator inside `fn` definitions) |
+| `include/parser.h` | Added `MAX_PARAMS 8`; added `EXPR_CALL` to `ExprType`; added `args[MAX_PARAMS]` / `arg_count` fields to `Expr`; added `NODE_FN_DEF` to `NodeType`; added `FnDefNode` struct; added `STMT_FN_DEF` to `ASTNode` stmt_type and `fn_def` to the node union; declared `free_expr()` as public |
+| `src/parser.c` | Made `free_expr()` non-static and updated it to recurse into `EXPR_CALL` args; extended `parse_primary()` to detect and parse function calls (`EXPR_CALL`) when an `IDENT` is followed by one or more `NUMBER`/`IDENT` arguments; added `parse_fn_def()`; updated `parse()` to handle `TOK_FN`; updated `free_ast()` to handle `STMT_FN_DEF` |
+| `include/exec.h` | Added `MAX_FUNCS 64`; added `FuncDef` and `FuncTable` structs; added `create_functable()` / `free_functable()` declarations; updated `execute()` signature to include `FuncTable*` |
+| `src/exec.c` | Added `clone_expr()` helper; added `create_functable()` and `free_functable()`; updated `eval_expr()` to take `FuncTable*` and handle `EXPR_CALL` (push scope, bind params, eval body, pop scope); updated `apply_transform()`, `exec_pipeline()`, and `execute()` to thread `FuncTable*` through; added `exec_fn_def()` to register a function (cloning its body expression) |
+| `src/main.c` | Created / destroyed `FuncTable`; added `fn … end` block scanning to the statement-splitting loop; added leading-newline skipping; strip `TOK_NEWLINE` from non-`fn` statement slices before passing to `parse()` so existing parsers are unaffected; passed `ft` to `execute()` |
+
+### New Files
+
+| File | Purpose |
+|------|---------|
+| `tests/test_fn.tri` | Verifies function declarations and calls: two-parameter add, two-parameter mul, single-parameter inc, and a function call inside a pipeline transform |
+
+---
+
+## Design Decisions
+
+- **`TOK_NEWLINE` as separator.** The language reuses the lexer's line-break token to cleanly separate the parameter list (same line as `fn`) from the body expression (next line). All other statement parsers receive a NEWLINE-stripped token slice, preserving backward compatibility.
+- **Function call detection in `parse_primary()`.** A plain `IDENT` (not `TOK_VAR_REF`) followed immediately by one or more `NUMBER`/`IDENT` tokens is treated as a function call. This is unambiguous in the existing grammar because no existing construct places adjacent IDENT/NUMBER tokens without an intervening operator.
+- **Separate function table.** `FuncTable` is independent of `SymTable`; functions and variables are in distinct namespaces. The table lives for the lifetime of the program and is created/freed in `main.c`.
+- **Cloned body expression.** When a function is registered, its body `Expr*` is deep-cloned into the `FuncTable`. The original AST node is freed as normal, so the function table owns its copy independently.
+- **Scoped execution.** At call time, all argument expressions are evaluated in the *caller's* scope first; then a new scope is pushed, parameters are bound, the body is evaluated, and the scope is popped. This ensures arguments reference the correct outer variables.
+- **No behaviour change for v0.2 programs.** All v0.2 tests continue to produce byte-for-byte identical output.
+
+---
+
+## Verification
+
+```
+$ make clean && make
+$ ./tri run tests/test_arith.tri              # → 15 / 14
+$ ./tri run tests/test_vars.tri               # → 15 / 70
+$ ./tri run tests/test_pipeline.tri           # → 120
+$ ./tri run tests/test_all.tri                # all expected values
+$ ./tri run tests/test_trn_expr.tri           # → 12 16 20 / 21 22 23 / 120
+$ ./tri run tests/test_fn.tri                 # → 7 / 42 / 10 / 10 11 12
+# Error cases — exit code 1 with correct message:
+$ ./tri run tests/test_invalid.tri            # Error: Unexpected character '"' at line 1
+$ ./tri run tests/test_trn_undef.tri          # Error: Undefined variable 'undef' at line 2
+```
+
+All checks pass. No pre-existing test output changed.
+
+---
+
+## Files Touched (summary)
+
+```
+include/lexer.h        ← TOK_FN, TOK_END, TOK_NEWLINE added
+src/lexer.c            ← fn/end keywords; TOK_NEWLINE emission
+include/parser.h       ← MAX_PARAMS; EXPR_CALL; FnDefNode; STMT_FN_DEF; free_expr()
+src/parser.c           ← free_expr() public; EXPR_CALL in parse_primary(); parse_fn_def(); fn in parse(); STMT_FN_DEF in free_ast()
+include/exec.h         ← FuncDef; FuncTable; create/free_functable(); execute() updated
+src/exec.c             ← clone_expr(); FuncTable ops; EXPR_CALL in eval_expr(); exec_fn_def(); ft threaded through
+src/main.c             ← FuncTable lifecycle; fn…end scan; NEWLINE stripping; ft passed to execute()
+tests/test_fn.tri      ← new
+```
+
+---
+
 # Task 3 — Expression Improvements in `trn`: Completion Notes
 
 ## What Was Done

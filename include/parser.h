@@ -3,11 +3,14 @@
 
 #include "lexer.h"
 
+#define MAX_PARAMS 8
+
 typedef enum {
     NODE_ARITH,    /* arithmetic expression */
     NODE_ASSIGN,   /* variable assignment   */
     NODE_PIPELINE, /* lst | whn | trn | sum */
-    NODE_EMT       /* emit / output         */
+    NODE_EMT,      /* emit / output         */
+    NODE_FN_DEF    /* function definition   */
 } NodeType;
 
 typedef enum {
@@ -19,16 +22,19 @@ typedef enum {
 typedef enum {
     EXPR_NUMBER,
     EXPR_VARIABLE,
-    EXPR_BINARY
+    EXPR_BINARY,
+    EXPR_CALL       /* function call: fn_name(args...) */
 } ExprType;
 
 typedef struct Expr {
     ExprType      type;
     double        num_val;
-    char          var_name[64];
+    char          var_name[64];  /* variable name or function name (EXPR_CALL) */
     OpType        op;
     struct Expr  *left;
     struct Expr  *right;
+    struct Expr  *args[MAX_PARAMS]; /* EXPR_CALL arguments */
+    int           arg_count;
     int           line; /* source line where this expression token was seen */
 } Expr;
 
@@ -81,17 +87,29 @@ typedef struct {
     int line; /* source line of the lst keyword */
 } PipelineNode;
 
+/* Function definition node: fn name p1 p2 ... \n expr \n end */
+typedef struct {
+    NodeType type;
+    char     name[64];
+    char     params[MAX_PARAMS][64];
+    int      param_count;
+    Expr    *body;           /* single-expression body */
+    int      line;
+} FnDefNode;
+
 typedef struct {
     NodeType type;
     union {
         ArithNode* arith;
         AssignNode* assign;
         PipelineNode* pipeline;
+        FnDefNode* fn_def;
     } node;
-    enum { STMT_EMTPY, STMT_ARITH, STMT_ASSIGN, STMT_PIPELINE } stmt_type;
+    enum { STMT_EMTPY, STMT_ARITH, STMT_ASSIGN, STMT_PIPELINE, STMT_FN_DEF } stmt_type;
 } ASTNode;
 
 ASTNode* parse(Token* tokens, int token_count);
 void free_ast(ASTNode* ast);
+void free_expr(Expr* expr);
 
 #endif

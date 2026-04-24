@@ -43,16 +43,24 @@ int main(int argc, char* argv[]) {
     free(source);
 
     SymTable* sym = create_symtable();
+    FuncTable* ft = create_functable();
 
     /* Multi-pipeline loop: each iteration extracts one statement (assignment,
-       arithmetic emit, or a full lst…emt pipeline) and dispatches it through
-       parse() + execute().  The symbol table is shared across all iterations
-       so variables assigned before or between pipelines remain visible to
-       subsequent ones.  Pipeline-internal state (filter, transform, sum flag)
-       is owned by the PipelineNode allocated inside parse() and freed after
-       execute() returns, so each pipeline starts completely clean. */
+       arithmetic emit, full lst…emt pipeline, or fn…end function definition)
+       and dispatches it through parse() + execute().  The symbol table and
+       function table are shared across all iterations so variables and
+       functions defined earlier remain visible to subsequent statements.
+       TOK_NEWLINE tokens are emitted by the lexer and are used only inside
+       fn definitions (to separate the parameter list from the body); all
+       other statement parsers receive a NEWLINE-free token slice. */
     int current = 0;
     while (current < token_count && tokens[current].type != TOK_EOF) {
+        /* Skip any leading newlines between statements. */
+        if (tokens[current].type == TOK_NEWLINE) {
+            current++;
+            continue;
+        }
+
         // Start of a new statement
         int start = current;
         
@@ -62,6 +70,16 @@ int main(int argc, char* argv[]) {
             tokens[current + 1].type == TOK_ASSIGN &&
             tokens[current + 2].type == TOK_NUMBER) {
             current += 3;
+        }
+        // Parse function definition: fn NAME params... NEWLINE body NEWLINE end
+        else if (tokens[current].type == TOK_FN) {
+            current++; // consume fn
+            while (current < token_count &&
+                   tokens[current].type != TOK_EOF &&
+                   tokens[current].type != TOK_END) {
+                current++;
+            }
+            if (tokens[current].type == TOK_END) current++;
         }
         // Parse pattern starting with lst: lst [ ... ] | ... emt
         else if (tokens[current].type == TOK_LST) {
@@ -96,23 +114,49 @@ int main(int argc, char* argv[]) {
             }
         } else {
             current++; // skip unknown token
+            continue;
         }
         
         int stmt_len = current - start;
         if (stmt_len > 0) {
-            ASTNode* ast = parse(&tokens[start], stmt_len);
+            ASTNode* ast;
+            if (tokens[start].type == TOK_FN) {
+                /* fn slices keep NEWLINE tokens — the parser uses them as
+                   the separator between the parameter list and the body. */
+                ast = parse(&tokens[start], stmt_len);
+            } else {
+                /* All other statement types: strip NEWLINE tokens so the
+                   existing parsers do not encounter unexpected token types. */
+                Token* buf = malloc(stmt_len * sizeof(Token));
+                if (!buf) {
+                    free(tokens);
+                    free_symtable(sym);
+                    free_functable(ft);
+                    return 1;
+                }
+                int bc = 0;
+                for (int k = start; k < current; k++) {
+                    if (tokens[k].type != TOK_NEWLINE)
+                        buf[bc++] = tokens[k];
+                }
+                ast = parse(buf, bc);
+                free(buf);
+            }
+
             if (ast == NULL) {
                 free(tokens);
                 free_symtable(sym);
+                free_functable(ft);
                 return 1;
             }
             
-            execute(ast, sym);
+            execute(ast, sym, ft);
             free_ast(ast);
         }
     }
 
     free(tokens);
     free_symtable(sym);
+    free_functable(ft);
     return 0;
 }
