@@ -189,7 +189,8 @@ static PipelineNode* parse_pipeline() {
     node->list = NULL;
     node->list_len = 0;
     node->filter = NULL;
-    node->transform = NULL;
+    node->transforms = NULL;
+    node->transform_count = 0;
     node->has_filter = 0;
     node->has_transform = 0;
     node->has_sum = 0;
@@ -280,7 +281,9 @@ static PipelineNode* parse_pipeline() {
                 return node;
             }
             
-            node->transform = trn;
+            node->transforms = realloc(node->transforms,
+                                       (node->transform_count + 1) * sizeof(Transform*));
+            node->transforms[node->transform_count++] = trn;
             node->has_transform = 1;
         } else if (match(TOK_SUM)) {
             node->has_sum = 1;
@@ -357,7 +360,11 @@ void free_ast(ASTNode* ast) {
     } else if (ast->stmt_type == STMT_PIPELINE) {
         if (ast->node.pipeline->list) free(ast->node.pipeline->list);
         if (ast->node.pipeline->filter) free(ast->node.pipeline->filter);
-        if (ast->node.pipeline->transform) free(ast->node.pipeline->transform);
+        if (ast->node.pipeline->transforms) {
+            for (int i = 0; i < ast->node.pipeline->transform_count; i++)
+                free(ast->node.pipeline->transforms[i]);
+            free(ast->node.pipeline->transforms);
+        }
         free(ast->node.pipeline);
     }
     

@@ -56,7 +56,8 @@ typedef struct {
     double* list;
     int list_len;
     Condition* filter;
-    Transform* transform;
+    Transform** transforms;   /* array of transform pointers */
+    int transform_count;      /* number of transforms        */
     int has_filter;
     int has_transform;
     int has_sum;

@@ -163,7 +163,9 @@ static void exec_pipeline(PipelineNode* node, SymTable* sym) {
         }
 
         if (node->has_transform) {
-            val = apply_transform(val, node->transform, sym);
+            for (int t = 0; t < node->transform_count; t++) {
+                val = apply_transform(val, node->transforms[t], sym);
+            }
         }
 
         if (do_sum) {
