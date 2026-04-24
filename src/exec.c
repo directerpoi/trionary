@@ -183,6 +183,9 @@ static void exec_assign(AssignNode* node, SymTable* sym) {
 }
 
 void execute(ASTNode* ast, SymTable* sym) {
+    /* sym is shared across all statements in the file so that variables
+       assigned before or between pipelines remain visible in subsequent
+       pipelines (symbol table is never reset between pipelines). */
     if (!ast) return;
     
     switch (ast->stmt_type) {

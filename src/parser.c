@@ -294,6 +294,10 @@ static PipelineNode* parse_pipeline() {
 }
 
 ASTNode* parse(Token* tok, int count) {
+    /* Reset all parser state so that consecutive calls (one per pipeline or
+       statement) do not inherit position, token-stream pointer, or error
+       flag from the previous invocation.  This is what allows a single source
+       file to contain multiple lst…emt pipelines without interference. */
     tokens = tok;
     token_count = count;
     current = 0;

@@ -43,7 +43,14 @@ int main(int argc, char* argv[]) {
     free(source);
 
     SymTable* sym = create_symtable();
-    
+
+    /* Multi-pipeline loop: each iteration extracts one statement (assignment,
+       arithmetic emit, or a full lst…emt pipeline) and dispatches it through
+       parse() + execute().  The symbol table is shared across all iterations
+       so variables assigned before or between pipelines remain visible to
+       subsequent ones.  Pipeline-internal state (filter, transform, sum flag)
+       is owned by the PipelineNode allocated inside parse() and freed after
+       execute() returns, so each pipeline starts completely clean. */
     int current = 0;
     while (current < token_count && tokens[current].type != TOK_EOF) {
         // Start of a new statement

@@ -393,6 +393,50 @@ The following behaviours must be **preserved unchanged** by every v0.2.0 step:
 
 ---
 
+## 15. What Was Done (Step 6 Summary)
+
+**Goal:** Support multiple pipelines per file — the interpreter must reset pipeline-internal state after each `emt` and immediately accept a new `lst` (or end-of-file), while keeping the symbol table alive so variables set before or between pipelines remain visible in subsequent ones.
+
+### Architecture review
+
+The v0.1.0 / v0.2.0 architecture already satisfies the requirement through `main.c`'s statement-splitting loop:
+
+1. **`main.c`** — a `while` loop scans the flat token stream, isolates each statement (assignment, arithmetic emit, or a complete `lst … emt` pipeline) into a sub-slice, then calls `parse()` and `execute()` for that slice. After `execute()` returns the loop immediately advances to the next statement, so any number of `lst … emt` pipelines in the same file are processed in order.
+2. **`parser.c` — `parse()`** — resets all static parser state (`current`, `tokens`, `token_count`, `error_occurred`) at the very start of every call. Each pipeline therefore begins with a fresh `PipelineNode`; no filter, transform, or sum flag from a previous pipeline can bleed through.
+3. **`exec.c` — `execute()`** — receives the same `SymTable* sym` pointer on every invocation. Variables assigned by an earlier statement (including variables assigned between pipelines) are visible to all subsequent pipelines. The symbol table is never cleared between pipelines.
+
+No code path assumed "exactly one pipeline per file". The multi-pipeline capability was inherent in the per-statement dispatch model from the outset.
+
+### Changes made
+
+To make the above intent explicit and discoverable, the following documentation comments were added. No logic was altered.
+
+| File | Change |
+|------|--------|
+| `src/main.c` | Added a block comment above the statement-dispatch loop explaining that (a) the loop supports an arbitrary number of pipelines, (b) the symbol table is shared across all iterations, and (c) each pipeline's internal state is owned by its `PipelineNode` and freed after execution, so every pipeline starts clean. |
+| `src/parser.c` | Added a comment at the top of `parse()` explaining why all static state is reset on every call and how that enables consecutive `lst … emt` pipelines to coexist without interference. |
+| `src/exec.c` | Added a comment at the top of `execute()` noting that `sym` is shared across all statements and is never reset, which is what gives symbol-table persistence across pipelines. |
+
+### Multi-pipeline behaviour verified
+
+The following cases were exercised and confirmed correct after the change:
+
+| Input pattern | Result |
+|---------------|--------|
+| Two `lst…emt` pipelines with `-> emt` | Both emit correctly; second pipeline unaffected by first |
+| First pipeline ends with standalone `emt`; second follows | Both emit correctly |
+| Variable assigned before pipelines used inside both | Correct value seen in both pipelines |
+| Variable assigned between two pipelines | Second pipeline sees the updated value |
+| Mixed: assignment → pipeline → arithmetic emit → pipeline | All four statements execute in order, sharing the same symbol table |
+
+### Backward-compatibility verification
+
+- All eight existing `.tri` test files (`test_arith.tri`, `test_vars.tri`, `test_pipeline.tri`, `test_all.tri`, `demo.tri`, `test_error.tri`, `test_invalid.tri`, `test_malformed.tri`) were rebuilt and re-run after the change.
+- Every file produced **byte-for-byte identical** stdout, stderr, and exit code to the v0.1.0 baseline recorded in Section 8.
+- No token type, AST node type, symbol-table logic, or execution path was removed or altered.
+
+---
+
 ## 10. What Was Done (Step 1 Summary)
 
 - Read and annotated every source file (`main.c`, `reader.c`, `lexer.c`, `parser.c`, `exec.c`, `output.c`) and every header (`lexer.h`, `parser.h`, `exec.h`, `reader.h`, `output.h`).
