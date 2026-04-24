@@ -1,3 +1,63 @@
+# Task 2 — Symbol Table Hardening: Completion Notes
+
+## What Was Done
+
+Task 2 from `plan.md` has been implemented in full. The goal was to replace the flat 256-slot variable array with a hash-map-based scope stack, and expose a `scope_push()` / `scope_pop()` API to support upcoming function scopes.
+
+---
+
+## Changes Made
+
+### Modified Files
+
+| File | Change |
+|------|--------|
+| `include/exec.h` | Removed old `Symbol` / flat-array `SymTable`; added `ScopeEntry`, `Scope` (open-addressing hash table with parent pointer), new `SymTable` (wrapper holding `Scope *current`); added `scope_push()` and `scope_pop()` declarations |
+| `src/exec.c` | Replaced linear-scan symtable with djb2 hash + linear-probing open-addressing hash table; `sym_set`, `sym_exists`, `sym_get` now walk the scope chain; added `scope_push`, `scope_pop`, and internal helpers `scope_hash`, `scope_lookup`, `scope_reserve` |
+
+---
+
+## Design Decisions
+
+- **Open addressing, power-of-2 capacity.** `SCOPE_CAPACITY = 128` slots per scope level, djb2 hash folded via `& (SCOPE_CAPACITY - 1)`, linear probing for collisions.  Deletion is never needed (no variable removal in the language), so no tombstones are required.
+- **Scope chain (`parent` pointer).** Each `Scope` carries a `parent` pointer so `sym_exists` and `sym_get` walk from the innermost scope outward; `sym_set` always writes into the current (innermost) scope, giving isolated function-local variables when `scope_push` is used.
+- **Global scope is never popped.** `scope_pop` is a no-op when the current scope has no parent, preventing accidental destruction of the global scope.
+- **No behaviour change for v0.2 programs.** All programs run with a single scope (the global one); the hash-map lookup is semantically identical to the old linear scan for any program that never calls `scope_push`.
+- **Full memory cleanup.** `free_symtable` walks the scope chain and frees every level; `scope_pop` frees the popped level immediately.
+- **Error on full table.** If all 128 slots in a scope level are occupied, `error_at()` is called with a descriptive message rather than silently dropping the variable (improvement over the old silent drop at `count >= 256`).
+
+---
+
+## Verification
+
+```
+$ make clean && make
+$ ./tri run tests/test_arith.tri              # → 15 / 14
+$ ./tri run tests/test_vars.tri               # → 15 / 70
+$ ./tri run tests/test_pipeline.tri           # → 120
+$ ./tri run tests/test_all.tri                # all expected values
+$ ./tri run tests/test_trn_var.tri            # → 120
+$ ./tri run tests/test_multi_pipeline.tri     # → 11 12 13 / 8 10 12
+$ ./tri run tests/test_mixed_arith_pipeline.tri
+# Error cases — exit code 1 with correct message:
+$ ./tri run tests/test_invalid.tri            # Error: Unexpected character '"' at line 1
+$ ./tri run tests/test_malformed_trn.tri      # Error: Expected number or variable …
+$ ./tri run tests/test_trn_undef.tri          # Error: Undefined variable 'undef' at line 2
+```
+
+All checks pass. No callers outside `exec.c` required any modification.
+
+---
+
+## Files Touched (summary)
+
+```
+include/exec.h   ← replaced Symbol/flat SymTable with ScopeEntry/Scope/SymTable; added scope_push/scope_pop
+src/exec.c       ← replaced linear-scan implementation with hash-map + scope-chain implementation
+```
+
+---
+
 # Task 1 — Error System Upgrade: Completion Notes
 
 ## What Was Done

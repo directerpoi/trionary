@@ -21,48 +21,93 @@ typedef struct Expr {
     int line; /* source line where this expression token was seen */
 } Expr;
 
-SymTable* create_symtable() {
+/* djb2 hash, folded into [0, SCOPE_CAPACITY). */
+static unsigned int scope_hash(const char* name) {
+    unsigned int h = 5381;
+    while (*name) h = ((h << 5) + h) + (unsigned char)*name++;
+    return h & (SCOPE_CAPACITY - 1);
+}
+
+/* Find the occupied ScopeEntry for 'name' in a single scope level.
+   Returns NULL when the name is absent. */
+static ScopeEntry* scope_lookup(Scope* scope, const char* name) {
+    unsigned int idx = scope_hash(name);
+    for (unsigned int i = 0; i < SCOPE_CAPACITY; i++) {
+        unsigned int slot = (idx + i) & (SCOPE_CAPACITY - 1);
+        ScopeEntry* e = &scope->slots[slot];
+        if (!e->occupied) return NULL;
+        if (strcmp(e->name, name) == 0) return e;
+    }
+    return NULL;
+}
+
+/* Find an empty slot or the existing slot for 'name' to insert / update.
+   Returns NULL only when every slot is occupied (table full). */
+static ScopeEntry* scope_reserve(Scope* scope, const char* name) {
+    unsigned int idx = scope_hash(name);
+    for (unsigned int i = 0; i < SCOPE_CAPACITY; i++) {
+        unsigned int slot = (idx + i) & (SCOPE_CAPACITY - 1);
+        ScopeEntry* e = &scope->slots[slot];
+        if (!e->occupied || strcmp(e->name, name) == 0) return e;
+    }
+    return NULL;
+}
+
+SymTable* create_symtable(void) {
     SymTable* t = malloc(sizeof(SymTable));
-    t->count = 0;
+    t->current = calloc(1, sizeof(Scope));
+    t->current->parent = NULL;
     return t;
 }
 
 void free_symtable(SymTable* t) {
+    Scope* s = t->current;
+    while (s) {
+        Scope* parent = s->parent;
+        free(s);
+        s = parent;
+    }
     free(t);
 }
 
+void scope_push(SymTable* t) {
+    Scope* s = calloc(1, sizeof(Scope));
+    s->parent = t->current;
+    t->current = s;
+}
+
+void scope_pop(SymTable* t) {
+    if (!t->current->parent) return; /* never pop the global scope */
+    Scope* old = t->current;
+    t->current = old->parent;
+    free(old);
+}
+
 void sym_set(SymTable* t, const char* name, double val) {
-    for (int i = 0; i < t->count; i++) {
-        if (strcmp(t->entries[i].name, name) == 0) {
-            t->entries[i].value = val;
-            return;
-        }
+    ScopeEntry* e = scope_reserve(t->current, name);
+    if (!e) {
+        error_at(0, "Symbol table full: cannot store variable '%s'", name);
     }
-    
-    if (t->count < 256) {
-        strncpy(t->entries[t->count].name, name, 63);
-        t->entries[t->count].name[63] = '\0';
-        t->entries[t->count].value = val;
-        t->count++;
-    }
+    strncpy(e->name, name, 63);
+    e->name[63] = '\0';
+    e->value    = val;
+    e->occupied = 1;
 }
 
 int sym_exists(SymTable* t, const char* name) {
-    for (int i = 0; i < t->count; i++) {
-        if (strcmp(t->entries[i].name, name) == 0) {
-            return 1;
-        }
+    for (Scope* s = t->current; s; s = s->parent) {
+        if (scope_lookup(s, name)) return 1;
     }
     return 0;
 }
 
 double sym_get(SymTable* t, const char* name) {
-    for (int i = 0; i < t->count; i++) {
-        if (strcmp(t->entries[i].name, name) == 0) {
-            return t->entries[i].value;
-        }
+    for (Scope* s = t->current; s; s = s->parent) {
+        ScopeEntry* e = scope_lookup(s, name);
+        if (e) return e->value;
     }
     error_at(0, "Undefined variable '%s'", name);
+    return 0.0; /* unreachable */
 }
 
 static double eval_expr(Expr* expr, SymTable* sym) {
