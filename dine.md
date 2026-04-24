@@ -706,3 +706,78 @@ Error: Expected number or variable after transform operator at line 3
 ### Conclusion
 
 No blocker. All eight regression tests produced **byte-for-byte identical** stdout, stderr, and exit codes to the v0.1.0 baseline. The implementation is clear to proceed to Step 9.
+
+---
+
+## 18. What Was Done (Step 9 Summary)
+
+**Goal:** Execute the five new test files from Step 7 and verify each edge case enumerated in plan.md Step 9.
+
+### Method
+
+1. Rebuilt the binary from source: `make clean && make` — clean build, zero errors (one pre-existing `fread` warning in `reader.c`, unrelated to any v0.2.0 change).
+2. Executed `./tri run <file>` for each of the five new test files, capturing stdout, stderr, and the exit code separately.
+3. Compared each result against the expected values recorded in **Section 16** (`Step 7 Summary`) of this document.
+4. Re-executed all eight baseline regression tests to confirm no regression was introduced.
+
+### Results — new v0.2.0 tests
+
+| Test file | Expected stdout | Actual stdout | stderr match | exit match | Status |
+|-----------|----------------|---------------|:---:|:---:|:------:|
+| `tests/test_trn_var.tri` | `120` | `120` | ✅ (empty) | ✅ (0) | **PASS** |
+| `tests/test_trn_undef.tri` | *(empty)* | *(empty)* | ✅ | ✅ (1) | **PASS** |
+| `tests/test_multi_pipeline.tri` | `11` `12` `13` `8` `10` `12` | `11` `12` `13` `8` `10` `12` | ✅ (empty) | ✅ (0) | **PASS** |
+| `tests/test_malformed_trn.tri` | *(empty)* | *(empty)* | ✅ | ✅ (1) | **PASS** |
+| `tests/test_mixed_arith_pipeline.tri` | `10` `5` `10` `15` `20` | `10` `5` `10` `15` `20` | ✅ (empty) | ✅ (0) | **PASS** |
+
+**All 5 new tests passed.**
+
+### Edge-case verification (per plan.md Step 9)
+
+| Edge case | Verified by | Result |
+|-----------|-------------|--------|
+| Variable in `trn` produces correct transformed output | `test_trn_var.tri` → stdout `120` | ✅ |
+| Undefined variable in `trn` exits non-zero with line-numbered error | `test_trn_undef.tri` → stderr `Error: Undefined variable 'undef' at line 2`, exit 1 | ✅ |
+| Multiple pipelines each emit correct independent results | `test_multi_pipeline.tri` → `11 12 13` then `8 10 12` | ✅ |
+| Malformed syntax produces descriptive line-numbered error and exits cleanly | `test_malformed_trn.tri` → stderr `Error: Expected number or variable after transform operator at line 3`, exit 1 | ✅ |
+| Mixed arithmetic + pipeline works end-to-end | `test_mixed_arith_pipeline.tri` → `10` then `5 10 15 20` | ✅ |
+
+### Observed outputs (verbatim)
+
+#### `tests/test_trn_var.tri`
+**stdout:** `120`  **stderr:** *(empty)*  **exit:** 0
+
+#### `tests/test_trn_undef.tri`
+**stdout:** *(empty)*
+**stderr:** `Error: Undefined variable 'undef' at line 2`  **exit:** 1
+
+#### `tests/test_multi_pipeline.tri`
+**stdout:** `11` `12` `13` `8` `10` `12`  **stderr:** *(empty)*  **exit:** 0
+
+#### `tests/test_malformed_trn.tri`
+**stdout:** *(empty)*
+**stderr:** `Error: Expected number or variable after transform operator at line 3`  **exit:** 1
+
+#### `tests/test_mixed_arith_pipeline.tri`
+**stdout:** `10` `5` `10` `15` `20`  **stderr:** *(empty)*  **exit:** 0
+
+### Regression check
+
+All eight existing baseline test files were re-run after Step 9 validation:
+
+| Test file | Status |
+|-----------|:------:|
+| `tests/test_arith.tri` | **PASS** |
+| `tests/test_vars.tri` | **PASS** |
+| `tests/test_pipeline.tri` | **PASS** |
+| `tests/test_all.tri` | **PASS** |
+| `tests/demo.tri` | **PASS** |
+| `tests/test_error.tri` | **PASS** |
+| `tests/test_invalid.tri` | **PASS** |
+| `tests/test_malformed.tri` | **PASS** |
+
+**All 8 regression tests still pass. No deviations detected.**
+
+### Conclusion
+
+All five v0.2.0 edge cases verified. Every new test produced output byte-for-byte identical to the expected values from Step 7. All eight v0.1.0 regression tests continue to pass. The implementation is clear to proceed to Step 10.
