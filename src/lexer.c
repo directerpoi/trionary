@@ -25,7 +25,8 @@ static int is_keyword(const char* word) {
            strcmp(word, "sum") == 0 ||
            strcmp(word, "emt") == 0 ||
            strcmp(word, "fn")  == 0 ||
-           strcmp(word, "end") == 0;
+           strcmp(word, "end") == 0 ||
+           strcmp(word, "use") == 0;
 }
 
 static TokenType keyword_type(const char* word) {
@@ -36,6 +37,7 @@ static TokenType keyword_type(const char* word) {
     if (strcmp(word, "emt") == 0) return TOK_EMT;
     if (strcmp(word, "fn")  == 0) return TOK_FN;
     if (strcmp(word, "end") == 0) return TOK_END;
+    if (strcmp(word, "use") == 0) return TOK_USE;
     return TOK_ERROR;
 }
 
@@ -69,10 +71,10 @@ Token* tokenise(const char* src, int* count) {
         if (src[i] == '\0') break;
 
         // Keywords and identifiers
-        if (isalpha(src[i])) {
+        if (isalpha(src[i]) || src[i] == '_') {
             char word[64];
             int wi = 0;
-            while (isalpha(src[i]) && wi < 63) {
+            while ((isalpha(src[i]) || isdigit(src[i]) || src[i] == '_') && wi < 63) {
                 word[wi++] = src[i++];
             }
             word[wi] = '\0';
@@ -164,12 +166,13 @@ Token* tokenise(const char* src, int* count) {
                 i++;
             }
             /* If the operator is immediately followed (no whitespace) by an alphabetic
-               character, emit the identifier as TOK_VAR_REF so the parser can distinguish
-               a variable reference (e.g. *a) from a numeric literal (e.g. *10). */
-            if (isalpha(src[i])) {
+               character or underscore, emit the identifier as TOK_VAR_REF so the parser
+               can distinguish a variable reference (e.g. *a) from a numeric literal
+               (e.g. *10). */
+            if (isalpha(src[i]) || src[i] == '_') {
                 char word[64];
                 int wi = 0;
-                while (isalpha(src[i]) && wi < 63) {
+                while ((isalpha(src[i]) || isdigit(src[i]) || src[i] == '_') && wi < 63) {
                     word[wi++] = src[i++];
                 }
                 word[wi] = '\0';

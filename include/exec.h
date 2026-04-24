@@ -37,13 +37,18 @@ void scope_pop(SymTable* t);
 /* Maximum number of user-defined functions. */
 #define MAX_FUNCS 64
 
+/* Signature for built-in (C-implemented) functions. */
+typedef double (*BuiltinFn)(double *args, int arg_count);
+
 /* Stored function definition (body is a cloned Expr* owned by FuncTable). */
 typedef struct {
-    char   name[64];
-    char   params[MAX_PARAMS][64];
-    int    param_count;
-    Expr  *body;
-    int    line;
+    char      name[64];
+    char      params[MAX_PARAMS][64];
+    int       param_count;
+    Expr     *body;           /* NULL for builtins */
+    int       line;
+    int       is_builtin;     /* 1 = C function, 0 = user-defined */
+    BuiltinFn builtin_fn;     /* non-NULL when is_builtin == 1   */
 } FuncDef;
 
 typedef struct {
@@ -53,6 +58,10 @@ typedef struct {
 
 FuncTable* create_functable(void);
 void       free_functable(FuncTable* ft);
+
+/* Built-in module registration — called by exec.c when a 'use' statement runs. */
+void register_math_module(FuncTable *ft);
+void register_io_module(FuncTable *ft);
 
 void execute(ASTNode* ast, SymTable* sym, FuncTable* ft);
 

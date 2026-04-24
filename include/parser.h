@@ -10,7 +10,8 @@ typedef enum {
     NODE_ASSIGN,   /* variable assignment   */
     NODE_PIPELINE, /* lst | whn | trn | sum */
     NODE_EMT,      /* emit / output         */
-    NODE_FN_DEF    /* function definition   */
+    NODE_FN_DEF,   /* function definition   */
+    NODE_USE       /* use <module> directive */
 } NodeType;
 
 typedef enum {
@@ -97,6 +98,13 @@ typedef struct {
     int      line;
 } FnDefNode;
 
+/* use <module> directive node */
+typedef struct {
+    NodeType type;
+    char     module_name[64];
+    int      line;
+} UseStmtNode;
+
 typedef struct {
     NodeType type;
     union {
@@ -104,8 +112,9 @@ typedef struct {
         AssignNode* assign;
         PipelineNode* pipeline;
         FnDefNode* fn_def;
+        UseStmtNode* use_stmt;
     } node;
-    enum { STMT_EMTPY, STMT_ARITH, STMT_ASSIGN, STMT_PIPELINE, STMT_FN_DEF } stmt_type;
+    enum { STMT_EMTPY, STMT_ARITH, STMT_ASSIGN, STMT_PIPELINE, STMT_FN_DEF, STMT_USE } stmt_type;
 } ASTNode;
 
 ASTNode* parse(Token* tokens, int token_count);

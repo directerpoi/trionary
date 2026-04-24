@@ -358,6 +358,27 @@ static FnDefNode* parse_fn_def() {
     return node;
 }
 
+static UseStmtNode* parse_use_stmt() {
+    UseStmtNode* node = malloc(sizeof(UseStmtNode));
+    node->type = NODE_USE;
+    node->line = peek().line;
+
+    if (!match(TOK_USE)) {
+        error_at(peek().line, "Expected 'use'");
+        return node;
+    }
+    node->line = tokens[current - 1].line;
+
+    if (!match(TOK_IDENT)) {
+        error_at(peek().line, "Expected module name after 'use'");
+        return node;
+    }
+    strncpy(node->module_name, tokens[current - 1].lexeme, 63);
+    node->module_name[63] = '\0';
+
+    return node;
+}
+
 ASTNode* parse(Token* tok, int count) {
     /* Reset all parser state so that consecutive calls (one per pipeline or
        statement) do not inherit position or token-stream pointer from the
@@ -403,6 +424,9 @@ ASTNode* parse(Token* tok, int count) {
     } else if (tokens[0].type == TOK_FN) {
         ast->stmt_type = STMT_FN_DEF;
         ast->node.fn_def = parse_fn_def();
+    } else if (tokens[0].type == TOK_USE) {
+        ast->stmt_type = STMT_USE;
+        ast->node.use_stmt = parse_use_stmt();
     } else {
         error_at(tokens[0].line, "Expected lst, identifier, or number");
     }
@@ -433,6 +457,8 @@ void free_ast(ASTNode* ast) {
            free the original body and the node itself. */
         free_expr(ast->node.fn_def->body);
         free(ast->node.fn_def);
+    } else if (ast->stmt_type == STMT_USE) {
+        free(ast->node.use_stmt);
     }
     
     free(ast);

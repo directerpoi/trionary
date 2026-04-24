@@ -117,8 +117,10 @@ FuncTable* create_functable(void) {
 }
 
 void free_functable(FuncTable* ft) {
-    for (int i = 0; i < ft->count; i++)
-        free_expr(ft->funcs[i].body);
+    for (int i = 0; i < ft->count; i++) {
+        if (!ft->funcs[i].is_builtin)
+            free_expr(ft->funcs[i].body);
+    }
     free(ft);
 }
 
@@ -183,6 +185,11 @@ static double eval_expr(Expr* expr, SymTable* sym, FuncTable* ft) {
             double arg_vals[MAX_PARAMS];
             for (int i = 0; i < expr->arg_count; i++)
                 arg_vals[i] = eval_expr(expr->args[i], sym, ft);
+
+            if (fd->is_builtin) {
+                return fd->builtin_fn(arg_vals, expr->arg_count);
+            }
+
             /* Push function scope, bind parameters, evaluate body, pop */
             scope_push(sym);
             for (int i = 0; i < fd->param_count; i++)
@@ -275,8 +282,20 @@ static void exec_fn_def(FnDefNode* node, FuncTable* ft) {
         strncpy(fd->params[i], node->params[i], 63);
         fd->params[i][63] = '\0';
     }
-    fd->body = clone_expr(node->body);
-    fd->line = node->line;
+    fd->body       = clone_expr(node->body);
+    fd->line       = node->line;
+    fd->is_builtin = 0;
+    fd->builtin_fn = NULL;
+}
+
+static void exec_use_stmt(UseStmtNode* node, FuncTable* ft) {
+    if (strcmp(node->module_name, "math") == 0) {
+        register_math_module(ft);
+    } else if (strcmp(node->module_name, "io") == 0) {
+        register_io_module(ft);
+    } else {
+        error_at(node->line, "Unknown module '%s'", node->module_name);
+    }
 }
 
 void execute(ASTNode* ast, SymTable* sym, FuncTable* ft) {
@@ -302,6 +321,10 @@ void execute(ASTNode* ast, SymTable* sym, FuncTable* ft) {
 
         case STMT_FN_DEF:
             exec_fn_def(ast->node.fn_def, ft);
+            break;
+
+        case STMT_USE:
+            exec_use_stmt(ast->node.use_stmt, ft);
             break;
             
         case STMT_EMTPY:

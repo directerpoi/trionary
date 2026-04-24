@@ -1,4 +1,126 @@
-# Task 4 — Function System (Declaration & Call): Completion Notes
+# Task 5 — Module System (Built-in Modules Only): Completion Notes
+
+## What Was Done
+
+Task 5 from `plan.md` has been implemented in full. The goal was to provide a `use <module>` directive that loads a curated set of built-in helpers compiled directly into the interpreter — no external dependencies, no file-system loading.
+
+---
+
+## Syntax
+
+```
+use math
+use io
+```
+
+- The `use` keyword followed by a module name on the **same line** loads all functions from that module into the function table.
+- After `use math`, all math functions (`floor`, `ceil`, `abs`, `sqrt`, `pow`) are callable anywhere a function call expression is valid.
+- After `use io`, `print` and `read_line` are available.
+- Loading the same module twice is idempotent (duplicate entries are silently skipped).
+
+---
+
+## Modules
+
+### `math`
+
+| Function | Params | Description |
+|----------|--------|-------------|
+| `floor`  | 1      | Round down to nearest integer |
+| `ceil`   | 1      | Round up to nearest integer |
+| `abs`    | 1      | Absolute value |
+| `sqrt`   | 1      | Square root |
+| `pow`    | 2      | `pow x y` → x raised to the power y |
+
+### `io`
+
+| Function    | Params | Description |
+|-------------|--------|-------------|
+| `print`     | 1      | Emits the argument to stdout and returns it |
+| `read_line` | 1      | Reads a double from stdin; returns the argument as default on EOF/error |
+
+> **Note on `print`:** When used as a standalone arithmetic statement (e.g. `print 42`), the value is emitted once by `print` and once by the implicit emit in `STMT_ARITH`, producing two output lines. Use `print` inside pipeline transforms or pass its result through a pipeline to avoid duplication.
+>
+> **Note on `read_line`:** The current expression parser requires at least one argument to identify a token sequence as a function call. `read_line` therefore takes a mandatory default value (`read_line 0`) that is returned when stdin is empty or at EOF.
+
+---
+
+## Changes Made
+
+### Modified Files
+
+| File | Change |
+|------|--------|
+| `include/lexer.h` | Added `TOK_USE` to `TokenType` |
+| `src/lexer.c` | Added `use` to `is_keyword()` and `keyword_type()`; extended identifier scanning to support underscores and alphanumeric continuation characters (enabling `read_line`) |
+| `include/parser.h` | Added `NODE_USE` to `NodeType`; added `UseStmtNode` struct; added `STMT_USE` to `ASTNode.stmt_type`; added `use_stmt` to the node union |
+| `src/parser.c` | Added `parse_use_stmt()`; wired `TOK_USE` into `parse()`; added `STMT_USE` branch to `free_ast()` |
+| `include/exec.h` | Added `BuiltinFn` typedef; added `is_builtin` and `builtin_fn` fields to `FuncDef`; declared `register_math_module()` and `register_io_module()` |
+| `src/exec.c` | Updated `eval_expr()` EXPR_CALL branch to dispatch to `builtin_fn` when `is_builtin == 1`; updated `free_functable()` to skip freeing `body` of builtins; initialised `is_builtin = 0` / `builtin_fn = NULL` in `exec_fn_def()`; added `exec_use_stmt()`; added `STMT_USE` case in `execute()` |
+| `src/main.c` | Added `TOK_USE` case to the statement-splitting loop (consumes `use` + module-name identifier) |
+| `Makefile` | Added `src/modules/math.c` and `src/modules/io.c` to `SRCS` |
+
+### New Files
+
+| File | Purpose |
+|------|---------|
+| `src/modules/math.c` | Implements `floor`, `ceil`, `abs`, `sqrt`, `pow` and `register_math_module()` |
+| `src/modules/io.c` | Implements `print`, `read_line` and `register_io_module()` |
+| `tests/test_modules.tri` | Verifies `use math` and all five math built-ins |
+
+---
+
+## Design Decisions
+
+- **Static module registry.** All built-in modules are compiled into the binary. No file-system I/O is required or performed during module loading. The `register_*_module()` functions simply iterate a compile-time array and append entries to the `FuncTable`.
+- **`BuiltinFn` function pointer.** A single `double (*)(double*, int)` signature handles all math and io built-ins uniformly. The `is_builtin` flag in `FuncDef` selects between the C-function path and the body-expression path in `eval_expr`.
+- **Idempotent registration.** Calling `use math` twice does not double-register functions; each registration loop checks for an existing entry by name and skips it.
+- **Identifier underscore support.** The lexer was extended to allow underscores (and digits after the first character) in identifiers. This enables `read_line` as a valid token. Existing programs are unaffected as no previous identifiers contained underscores.
+- **`read_line` default parameter.** Because the parser identifies function calls by an IDENT followed by ≥1 NUMBER/IDENT token(s), zero-argument calls are not distinguishable from variable references without coupling the parser to the function table. `read_line` therefore takes one argument used as the default value on EOF. This is a pragmatic workaround within the current single-pass architecture; a future parser-improvement task could lift this restriction.
+- **`print` as an expression.** `print x` emits `x` to stdout as a side effect and returns `x`, making it usable inside pipeline transforms (e.g. `trn * print 2`). When used as a standalone arithmetic statement, the implicit STMT_ARITH emit produces a second line of output — this is expected and documented.
+- **No behaviour change for v0.2 / v0.3 programs.** All existing tests produce byte-for-byte identical output.
+
+---
+
+## Verification
+
+```
+$ make clean && make
+$ ./tri run tests/test_arith.tri              # → 15 / 14
+$ ./tri run tests/test_vars.tri               # → 15 / 70
+$ ./tri run tests/test_pipeline.tri           # → 120
+$ ./tri run tests/test_all.tri                # all expected values
+$ ./tri run tests/test_trn_expr.tri           # → 12 16 20 / 21 22 23 / 120
+$ ./tri run tests/test_fn.tri                 # → 7 / 42 / 10 / 10 11 12
+$ ./tri run tests/test_modules.tri            # → 3 / 4 / 5 / 3 / 8 / 14
+# Error cases — exit code 1 with correct message:
+$ ./tri run tests/test_invalid.tri            # Error: Unexpected character '"' at line 1
+$ ./tri run tests/test_trn_undef.tri          # Error: Undefined variable 'undef' at line 2
+```
+
+All checks pass. No pre-existing test output changed.
+
+---
+
+## Files Touched (summary)
+
+```
+include/lexer.h            ← TOK_USE added
+src/lexer.c                ← use keyword; underscore/alphanumeric identifiers
+include/parser.h           ← NODE_USE; UseStmtNode; STMT_USE; use_stmt union member
+src/parser.c               ← parse_use_stmt(); TOK_USE in parse(); STMT_USE in free_ast()
+include/exec.h             ← BuiltinFn; is_builtin/builtin_fn in FuncDef; register_*_module() decls
+src/exec.c                 ← builtin dispatch in eval_expr; free_functable fix; exec_use_stmt(); STMT_USE in execute()
+src/main.c                 ← TOK_USE case in statement-splitting loop
+Makefile                   ← src/modules/math.c and src/modules/io.c added
+src/modules/math.c         ← new
+src/modules/io.c           ← new
+tests/test_modules.tri     ← new
+```
+
+---
+
+
 
 ## What Was Done
 
