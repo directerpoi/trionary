@@ -2,6 +2,7 @@ CC      = gcc
 CFLAGS  = -std=c11 -Wall -Wextra -O2 -Iinclude
 SRCS    = src/main.c src/reader.c src/lexer.c src/parser.c src/exec.c src/output.c src/error.c src/modules/math.c src/modules/io.c src/modules/list.c src/modules/string.c
 TARGET  = tri
+PREFIX ?= /data/data/com.termux/files/usr
 
 $(TARGET): $(SRCS)
 	$(CC) $(CFLAGS) $(SRCS) -o $(TARGET) -lm
@@ -11,3 +12,11 @@ test: $(TARGET)
 
 clean:
 	rm -f $(TARGET)
+
+install: $(TARGET)
+	mkdir -p $(PREFIX)/bin
+	cp $(TARGET) $(PREFIX)/bin/$(TARGET)
+	chmod +x $(PREFIX)/bin/$(TARGET)
+
+uninstall:
+	rm -f $(PREFIX)/bin/$(TARGET)
