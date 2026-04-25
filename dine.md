@@ -1361,3 +1361,137 @@ tests/test_keyword_hint.expected ← new
 ```
 
 ---
+
+# v0.3.2 Steps 9 & 10 — Undefined `argN` Warning (U9) + `tri test` Subcommand (U6): Completion Notes
+
+## What Was Done
+
+Implemented **Step 9** (undefined `argN` warning, U9) and **Step 10** (`tri test` subcommand, U6) from `plan.md`.
+
+---
+
+## Step 9 — Undefined `argN` Warning (U9)
+
+### Summary
+
+When a script accesses `arg0` … `argN` where N is at or beyond the number of CLI arguments provided (i.e. the index is ≥ `argc`), and no `??` coalesce fallback is present in the expression, the interpreter now emits a warning to stderr and continues execution returning `0`:
+
+```
+Warning: 'arg2' is not defined (argc=1); returning 0. Consider using 'arg2 ?? default'.
+```
+
+The `??` operator path remains completely silent — the `EXPR_COALESCE` handler already short-circuits before calling `eval_expr` on the left operand, so no warning is ever generated when a fallback is provided.
+
+```tri
+# argc=1, arg0=42 supplied
+arg0 -> emt          # prints 42 — no warning
+arg1 -> emt          # warning + prints 0
+arg2 ?? 99 -> emt    # silent — prints 99 (coalesce handles it)
+```
+
+### Changes Made
+
+#### Modified Files
+
+| File | Change |
+|------|--------|
+| `src/exec.c` | Added `is_argn_variable()` helper — returns 1 when `name` matches `arg[0-9]+`; Added `warn_argn_undefined()` helper — flushes stdout then writes the warning to stderr; `eval_expr()` EXPR_VARIABLE case now calls `warn_argn_undefined()` and returns `0.0` instead of `error_at()` when the missing variable is an `argN`; `exec_assign()` ASSIGN_VARIABLE case applies the same pattern for `a = argN` assignment statements |
+
+#### New Test Files
+
+| File | Purpose |
+|------|---------|
+| `tests/test_arg_warning.tri` | Exercises out-of-range arg access (warning) and in-range access (no warning) and coalesce (silent) |
+| `tests/test_arg_warning.args` | Provides a single CLI argument (`42`) so arg0 is defined and arg1/arg2 are not |
+| `tests/test_arg_warning.expected` | Combined stdout+stderr expected output |
+
+### Design Decisions
+
+- **`fflush(stdout)` before `fprintf(stderr, ...)`**. stdout is block-buffered when redirected to a file. Flushing before writing to stderr ensures the already-printed output appears above the warning in combined captures (e.g. `> file 2>&1`), making the output deterministic for test comparison.
+- **Warning only — no behaviour change**. Execution continues; the variable evaluates to `0.0`, matching the previously silent behaviour but now surfaced to the user.
+- **`argc` variable read from the symbol table**. The argc count was already registered by `main.c` as the `"argc"` variable. `warn_argn_undefined()` reads it with `sym_get()` to include in the message.
+- **`??` path unaffected**. `EXPR_COALESCE` checks `sym_exists()` before dispatching to `eval_expr()` on the left operand; if the variable is absent it returns the right-hand fallback directly, never reaching the `EXPR_VARIABLE` case.
+
+---
+
+## Step 10 — `tri test` Subcommand (U6)
+
+### Summary
+
+`tri test [dir]` scans the given directory (default: `./tests`) for `test_*.tri` files, runs each through the interpreter, and compares combined stdout+stderr against the corresponding `test_*.expected` file. Optional `.args` (extra CLI arguments) and `.stdin` (standard input) auxiliary files are honoured, matching the behaviour of `tests/run_tests.sh`.
+
+```
+$ ./tri test
+PASS: test_all.tri
+PASS: test_arg_warning.tri
+...
+Results: 24 passed, 0 failed
+
+$ ./tri test ./my_tests
+```
+
+Exit code is `0` when all tests pass and `1` when any test fails.
+
+### Changes Made
+
+#### Modified Files
+
+| File | Change |
+|------|--------|
+| `src/main.c` | Added `#define _POSIX_C_SOURCE 200809L`; added `#include <dirent.h>`, `<unistd.h>`, `<fcntl.h>`, `<sys/wait.h>`; added `files_equal()` helper (byte-by-byte file comparison); added `cmp_strptr()` qsort comparator; added `run_tests()` function (see below); added `test` subcommand dispatch in `main()`; updated `print_help()` to list `test [dir]` and two usage examples |
+
+#### `run_tests()` design
+
+1. Opens the directory with `opendir` / `readdir` / `closedir` (no shell glob).
+2. Collects full paths of all `test_*.tri` files (minimum filename length: 9 chars).
+3. Sorts them alphabetically with `qsort` for a deterministic run order.
+4. For each test file:
+   - Derives base path, expected file path, optional `.args` and `.stdin` paths.
+   - Parses the `.args` line into individual tokens (word-split on whitespace).
+   - Creates a temporary output file via `mkstemp` using `$TMPDIR` (falls back to `/tmp`).
+   - **Uses `fork` / `execvp`** — never `system()`. Arguments are passed as separate `execvp` array entries, completely eliminating shell-injection risk. The child inherits the open `mkstemp` fd via `dup2` for both stdout and stderr.
+   - Parent calls `waitpid`, then compares the output file to the expected file with `files_equal()`.
+5. Prints `PASS` / `FAIL` / `SKIP` per test and a final `Results: N passed, M failed` summary.
+
+### Design Decisions
+
+- **`fork`/`execvp` instead of `system()`**. `system()` constructs a shell command by string concatenation of user-provided values (directory path, file paths, `.args` content), which creates a shell-injection vector flagged by CodeQL. `execvp` bypasses the shell entirely: arguments are separate array entries, never interpreted by a shell.
+- **`mkstemp` fd kept open through fork**. The child receives the writable fd via `dup2` directly. This eliminates the TOCTOU race condition that would arise from closing the fd and then reopening the file by path.
+- **`$TMPDIR` with `/tmp` fallback**. Reads the `TMPDIR` environment variable so the test runner respects system-defined temp locations on macOS and other POSIX platforms.
+- **Shell script kept as fallback**. `tests/run_tests.sh` is unchanged. Both the Makefile `make test` target (which uses the shell script) and `./tri test` produce identical results.
+- **Alphabetical sort**. `qsort` on the collected paths produces the same order as bash's glob expansion, keeping `tri test` output consistent with `make test`.
+
+### Verification
+
+```
+$ make clean && make
+$ make test
+# Results: 24 passed, 0 failed
+
+$ ./tri test
+# Results: 24 passed, 0 failed
+
+$ ./tri test ./tests
+# Results: 24 passed, 0 failed
+
+$ ./tri help
+# Commands:
+#   run <file.tri> [arg0 arg1 ...]   Execute a Trionary source file
+#   test [dir]                       Run tests in dir (default: ./tests)
+#   help                             Show this help message
+#   version                          Print the interpreter version
+```
+
+---
+
+## Files Touched (summary)
+
+```
+src/exec.c                        ← is_argn_variable(); warn_argn_undefined(); EXPR_VARIABLE + ASSIGN_VARIABLE warning paths
+src/main.c                        ← POSIX macro; dirent/unistd/fcntl/wait headers; files_equal(); cmp_strptr(); run_tests(); test subcommand dispatch; updated print_help()
+tests/test_arg_warning.tri        ← new
+tests/test_arg_warning.args       ← new
+tests/test_arg_warning.expected   ← new
+```
+
+---

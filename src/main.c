@@ -1,7 +1,11 @@
+#define _POSIX_C_SOURCE 200809L
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <dirent.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/wait.h>
 #include "reader.h"
 #include "lexer.h"
 #include "parser.h"
@@ -35,7 +39,11 @@ static int cmp_strptr(const void* a, const void* b) {
 
 /* Run all test_*.tri files found in 'dir' against their .expected files.
    'exe' is the path to the interpreter (argv[0] from main).
-   Returns 0 if every test passes, 1 if any test fails. */
+   Returns 0 if every test passes, 1 if any test fails.
+
+   Uses fork/execvp instead of system() to avoid shell-injection risks:
+   all arguments are passed as separate execvp array entries, never
+   concatenated into a shell command string. */
 static int run_tests(const char* dir, const char* exe) {
     DIR* d = opendir(dir);
     if (!d) {
@@ -43,14 +51,15 @@ static int run_tests(const char* dir, const char* exe) {
         return 1;
     }
 
-    /* Collect paths of test_*.tri files. */
+    /* Collect paths of test_*.tri files.
+       Minimum valid name is "test_?.tri" (9 chars, one char between _ and .tri). */
     char** files = NULL;
     int nfiles = 0, cap = 0;
     struct dirent* entry;
     while ((entry = readdir(d)) != NULL) {
         const char* name = entry->d_name;
         size_t namelen   = strlen(name);
-        if (namelen <= 4 ||
+        if (namelen < 9 ||
             strncmp(name, "test_", 5) != 0 ||
             strcmp(name + namelen - 4, ".tri") != 0)
             continue;
@@ -97,18 +106,27 @@ static int run_tests(const char* dir, const char* exe) {
             fclose(ef);
         }
 
-        /* Read optional extra CLI arguments from a .args file (one line). */
-        char args_str[512] = "";
+        /* Read optional extra CLI arguments from a .args file (one line).
+           Arguments are split on whitespace and passed to execvp individually,
+           so they are never interpreted by a shell. */
+        char args_buf[512] = "";
+        char* arg_tokens[32];
+        int   arg_token_count = 0;
         char args_path[1024];
         snprintf(args_path, sizeof(args_path), "%s.args", base);
         {
             FILE* af = fopen(args_path, "r");
             if (af) {
-                if (fgets(args_str, sizeof(args_str), af)) {
-                    size_t alen = strlen(args_str);
+                if (fgets(args_buf, sizeof(args_buf), af)) {
+                    size_t alen = strlen(args_buf);
                     while (alen > 0 &&
-                           (args_str[alen - 1] == '\n' || args_str[alen - 1] == '\r'))
-                        args_str[--alen] = '\0';
+                           (args_buf[alen - 1] == '\n' || args_buf[alen - 1] == '\r'))
+                        args_buf[--alen] = '\0';
+                    char* tok = strtok(args_buf, " \t");
+                    while (tok && arg_token_count < 30) {
+                        arg_tokens[arg_token_count++] = tok;
+                        tok = strtok(NULL, " \t");
+                    }
                 }
                 fclose(af);
             }
@@ -117,36 +135,65 @@ static int run_tests(const char* dir, const char* exe) {
         /* Determine stdin source (a .stdin file or /dev/null). */
         char stdin_path[1024];
         snprintf(stdin_path, sizeof(stdin_path), "%s.stdin", base);
-        int has_stdin;
+        const char* stdin_src;
         {
             FILE* sf = fopen(stdin_path, "r");
-            has_stdin = (sf != NULL);
+            stdin_src = sf ? stdin_path : "/dev/null";
             if (sf) fclose(sf);
         }
-        const char* stdin_src = has_stdin ? stdin_path : "/dev/null";
 
-        /* Create a temporary file to capture combined stdout + stderr. */
-        char tmp_path[] = "/tmp/tri_test_XXXXXX";
+        /* Create a temporary file to capture combined stdout + stderr.
+           The mkstemp fd is kept open; the child inherits it via dup2 so
+           the OS serialises writes and there is no TOCTOU window. */
+        const char* tmpdir = getenv("TMPDIR");
+        if (!tmpdir || tmpdir[0] == '\0') tmpdir = "/tmp";
+        char tmp_path[256];
+        snprintf(tmp_path, sizeof(tmp_path), "%s/tri_test_XXXXXX", tmpdir);
         int tmp_fd = mkstemp(tmp_path);
         if (tmp_fd < 0) {
             fprintf(stderr, "Error: mkstemp failed\n");
             fail++;
             continue;
         }
-        close(tmp_fd);
 
-        /* Build and execute the shell command. */
-        char cmd[4096];
-        if (args_str[0]) {
-            snprintf(cmd, sizeof(cmd),
-                     "\"%s\" run \"%s\" %s < \"%s\" > \"%s\" 2>&1",
-                     exe, tri_path, args_str, stdin_src, tmp_path);
-        } else {
-            snprintf(cmd, sizeof(cmd),
-                     "\"%s\" run \"%s\" < \"%s\" > \"%s\" 2>&1",
-                     exe, tri_path, stdin_src, tmp_path);
+        /* Open stdin source file before forking. */
+        int stdin_fd = open(stdin_src, O_RDONLY);
+        if (stdin_fd < 0) stdin_fd = open("/dev/null", O_RDONLY);
+
+        /* Build the argv array for the child: exe run tri_path [extra args...] */
+        const char* child_argv[36];
+        int ci = 0;
+        child_argv[ci++] = exe;
+        child_argv[ci++] = "run";
+        child_argv[ci++] = tri_path;
+        for (int k = 0; k < arg_token_count; k++)
+            child_argv[ci++] = arg_tokens[k];
+        child_argv[ci] = NULL;
+
+        pid_t pid = fork();
+        if (pid < 0) {
+            fprintf(stderr, "Error: fork failed\n");
+            close(tmp_fd);
+            close(stdin_fd);
+            fail++;
+            continue;
         }
-        system(cmd);
+
+        if (pid == 0) {
+            /* Child: wire up stdin/stdout/stderr and exec the interpreter. */
+            dup2(stdin_fd, STDIN_FILENO);
+            dup2(tmp_fd, STDOUT_FILENO);
+            dup2(tmp_fd, STDERR_FILENO);
+            close(stdin_fd);
+            close(tmp_fd);
+            execvp(exe, (char* const*)child_argv);
+            _exit(1); /* exec failed */
+        }
+
+        /* Parent: wait for the child then close our copies of the fds. */
+        close(stdin_fd);
+        close(tmp_fd);
+        waitpid(pid, NULL, 0);
 
         /* Compare output against the expected file. */
         if (files_equal(tmp_path, expected)) {
