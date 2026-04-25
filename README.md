@@ -2,7 +2,7 @@
 
 > A minimal, readable programming language for pipeline-based data transformations.
 
-Trionary is a statically-structured scripting language built around nine keywords. It is intentionally small: no runtime, no dependencies, no ambiguity. The entire language is a single C11 binary.
+Trionary is a scripting language built around a curated vocabulary of keywords. It is intentionally lean: no runtime, no dependencies, no ambiguity. The entire language is a single C11 binary.
 
 ---
 
@@ -19,10 +19,18 @@ Trionary is a statically-structured scripting language built around nine keyword
   - [Arithmetic](#arithmetic)
   - [Keywords](#keywords)
   - [Pipelines](#pipelines)
+  - [Control Flow](#control-flow)
+  - [Data Types](#data-types)
   - [Functions](#functions)
+  - [Lambdas](#lambdas)
   - [Modules](#modules)
+  - [Error Handling](#error-handling)
   - [CLI Input](#cli-input)
   - [Interactive Input](#interactive-input)
+  - [I/O Keywords](#io-keywords)
+  - [Module System](#module-system)
+  - [Developer Tools](#developer-tools)
+  - [Exit and Stop](#exit-and-stop)
 - [Examples](#examples)
 - [Project Structure](#project-structure)
 - [Design Principles](#design-principles)
@@ -34,13 +42,19 @@ Trionary is a statically-structured scripting language built around nine keyword
 
 ## Features
 
-- **9 keywords** — `lst`, `whn`, `trn`, `sum`, `emt`, `fn`, `end`, `use`, `inpt`
+- **Curated keyword set** — Core: `lst` `whn` `trn` `sum` `emt` `fn` `end` `use` `inpt` | Control Flow: `if` `elif` `els` `for` `whl` `each` `rpt` `brk` `nxt` `ret` | Types: `str` `arr` `bool` `int` `flt` `map` `pair` `tpl` `set` `let` `true` `fls` `nil` | Modules: `imp` `frm` `as` `exp` `pkg` | Errors: `try` `ctch` `thr` `err` `asrt` `dflt` | I/O: `say` `prt` `frd` `fwr` `fap` `csv` `jrd` | System: `ext` `stp` | Functional: `lmb` | DX: `dbg` `log` `tst` `trc` `doc` `chk` `tim`
 - **Pipeline-oriented** — chain filters, transforms, and aggregations
+- **Control flow** — `if`/`elif`/`els`, `for`, `whl`, `each`, `rpt` loops with `brk`/`nxt`/`ret`
+- **Rich data types** — strings, arrays, maps, sets, tuples, pairs, booleans, nil
 - **Named functions** — define reusable pure functions with `fn … end`
-- **Built-in modules** — load math and I/O helpers with `use math` / `use io`
+- **First-class lambdas** — anonymous functions with `lmb params -> expr`
+- **Built-in modules** — `math`, `io`, `list`, `string` loaded with `use` or `imp`
+- **Structured error handling** — `try`/`ctch` blocks, `thr`, `asrt`
 - **Interactive input** — read numeric values from stdin with `inpt`
+- **Rich I/O** — `say`, `prt`, file read/write (`frd`, `fwr`, `fap`), CSV, JSON
 - **Labeled output** — prefix any emitted value with a string label (`emt "Result:" expr`)
 - **Separator control** — join pipeline output with a custom delimiter (`sep ","`)
+- **Developer tools** — inline tests (`tst`), debug output (`dbg`, `log`, `trc`), timing (`tim`), type checks (`chk`)
 - **Zero dependencies** — pure C11, no libraries beyond the C standard math library
 - **Single binary** — one executable, no installer or runtime required
 - **POSIX-compatible** — runs on Linux, macOS, and any POSIX-compliant system
@@ -141,6 +155,8 @@ price - discount -> emt   # 80
 
 ### Keywords
 
+#### Pipeline keywords
+
 | Keyword | Role | Description |
 |---------|------|-------------|
 | `lst` | Source | Opens a pipeline with a literal list of values |
@@ -148,10 +164,95 @@ price - discount -> emt   # 80
 | `trn` | Transform | Applies an arithmetic operation to each element |
 | `sum` | Aggregate | Reduces the pipeline to a single sum |
 | `emt` | Output | Prints the current value(s) to stdout |
+
+#### Structure keywords
+
+| Keyword | Role | Description |
+|---------|------|-------------|
 | `fn` | Definition | Opens a named function definition |
-| `end` | Definition | Closes a `fn` block |
+| `end` | Structure | Closes a `fn`, `if`, `for`, `whl`, `each`, `rpt`, or `try` block |
 | `use` | Module | Loads a built-in module's functions into scope |
+| `imp` | Module | Import a module (supports aliasing with `as`) |
+| `frm` | Module | Selective import: `frm module imp symbol` |
+| `as` | Module | Alias a module: `imp math as m` |
+| `exp` | Module | Export a symbol from the current package |
+| `pkg` | Module | Declare the current package name |
 | `inpt` | Input | Reads a numeric value from stdin |
+
+#### Control flow keywords
+
+| Keyword | Role | Description |
+|---------|------|-------------|
+| `if` | Branch | Conditional block; closed with `end` |
+| `elif` | Branch | Additional condition branch inside an `if` block |
+| `els` | Branch | Else branch inside an `if` block |
+| `for` | Loop | Numeric range loop: `for var start end` |
+| `whl` | Loop | Condition-controlled loop |
+| `each` | Loop | Iterate over an array, set, or tuple |
+| `rpt` | Loop | Repeat a block N times |
+| `brk` | Loop | Break out of the nearest enclosing loop |
+| `nxt` | Loop | Skip to the next iteration |
+| `ret` | Function | Return a value from a function |
+| `not` | Logic | Logical negation |
+| `and` | Logic | Logical conjunction |
+| `or` | Logic | Logical disjunction |
+| `in` | Membership | Check if a value is in a collection |
+| `let` | Variable | Declare an immutable variable |
+| `ext` | System | Exit the program with an optional status code |
+| `stp` | System | Stop the program immediately (exit code 1) |
+
+#### Data-type keywords
+
+| Keyword | Role | Description |
+|---------|------|-------------|
+| `str` | Type | Declare a string variable |
+| `arr` | Type | Declare an ordered array |
+| `bool` | Type | Declare a boolean variable |
+| `true` | Literal | Boolean true |
+| `fls` | Literal | Boolean false |
+| `nil` | Literal | Null / no-value sentinel |
+| `int` | Type | Declare an integer variable |
+| `flt` | Type | Declare a float variable |
+| `map` | Type | Declare a key-value map |
+| `pair` | Type | A single key-value pair |
+| `tpl` | Type | Declare an immutable tuple |
+| `set` | Type | Declare a collection of unique values |
+
+#### Error-handling keywords
+
+| Keyword | Role | Description |
+|---------|------|-------------|
+| `try` | Error | Start a guarded block |
+| `ctch` | Error | Catch block for a `try` statement |
+| `thr` | Error | Throw a runtime error |
+| `err` | Error | Create a named error value |
+| `asrt` | Error | Assert a condition; aborts with an error if false |
+| `dflt` | Error | Default fallback for nil or error values |
+
+#### I/O keywords
+
+| Keyword | Role | Description |
+|---------|------|-------------|
+| `say` | Output | Print value(s) followed by a newline |
+| `prt` | Output | Print value(s) without a trailing newline |
+| `frd` | File | Read entire contents of a file |
+| `fwr` | File | Overwrite a file with content |
+| `fap` | File | Append content to a file |
+| `csv` | File | Parse a CSV file into an array of arrays |
+| `jrd` | File | Read a JSON file |
+
+#### Developer-experience keywords
+
+| Keyword | Role | Description |
+|---------|------|-------------|
+| `lmb` | Functional | Anonymous lambda: `lmb params -> expr` |
+| `dbg` | DX | Dump a value to stderr with a `DEBUG:` prefix |
+| `log` | DX | Log a value to stderr with a `LOG:` prefix |
+| `trc` | DX | Trace a value to stderr with a `TRACE:` prefix |
+| `tst` | DX | Inline unit test: fails with a message if condition is false |
+| `doc` | DX | Attach a documentation string to the following definition |
+| `chk` | DX | Runtime type-check; aborts if the value is the wrong type |
+| `tim` | Performance | Measure wall-clock execution time of an expression |
 
 #### `lst` — List source
 
@@ -284,11 +385,13 @@ lst [1,2,3,4,5] | trn * square 1 -> emt   # 1 4 9 16 25
 
 ### Modules
 
-Built-in modules are loaded with `use`. All functions from the module become available immediately after the directive.
+Built-in modules are loaded with `use` or `imp`. All functions from the module become available immediately after the directive.
 
 ```tri
 use math
 use io
+use list
+use string
 ```
 
 #### `math` module
@@ -300,17 +403,67 @@ use io
 | `abs`    | 1 | Absolute value |
 | `sqrt`   | 1 | Square root |
 | `pow`    | 2 | `pow x y` → x raised to the power y |
+| `sin`    | 1 | Sine (radians) |
+| `cos`    | 1 | Cosine (radians) |
+| `tan`    | 1 | Tangent (radians) |
+| `log`    | 1 | Natural logarithm |
+| `log10`  | 1 | Base-10 logarithm |
+| `exp`    | 1 | e raised to the power x |
+| `mod`    | 2 | Floating-point remainder |
+| `round`  | 1 | Round to nearest integer |
+| `min`    | ≥1 | Minimum of arguments |
+| `max`    | ≥1 | Maximum of arguments |
+| `clmp`   | 3 | `clmp x lo hi` — clamp x between lo and hi |
+| `rnd`    | 0 | Random float in [0, 1) |
+| `rndi`   | 2 | `rndi lo hi` — random integer in [lo, hi] |
 
 #### `io` module
 
 | Function    | Params | Description |
 |-------------|--------|-------------|
-| `print`     | 1 | Emits the argument to stdout and returns it |
-| `read_line` | 1 | Reads a double from stdin; the argument is returned as default on EOF/error |
+| `print`     | ≥1 | Emit argument(s) to stdout and return the value |
+| `read_line` | 1 | Read a double from stdin; argument is the default on EOF/error |
+| `fex`       | 1 | Return `true` if the path exists, `fls` otherwise |
+| `fls`       | 1 | Return an array of filenames in the given directory |
 
 > **Note on `print`:** When used as a standalone arithmetic statement (e.g. `print 42`), the value is emitted once by `print` and once by the implicit emit in `STMT_ARITH`, producing two output lines. Use `print` inside pipeline transforms or assign its result to avoid duplication.
 
 > **Note on `read_line`:** Takes one mandatory default value argument (`read_line 0`) that is returned when stdin is empty or at EOF.
+
+#### `list` module
+
+| Function | Params | Description |
+|----------|--------|-------------|
+| `srt`    | 1 | Return a sorted copy of the array (ascending) |
+| `srtd`   | 1 | Return a sorted copy (descending) |
+| `rev`    | 1 | Return a reversed copy of the array |
+| `cnt`    | 1 | Return the number of elements |
+| `avg`    | 1 | Return the average of all numeric elements |
+| `unq`    | 1 | Return an array with duplicates removed |
+| `zip`    | 2 | Zip two arrays into an array of pairs |
+| `fnd`    | 2 | `fnd arr val` — return the first matching element or nil |
+| `idx`    | 2 | `idx arr val` — return the index of the first match or -1 |
+| `push`   | 2 | `push arr val` — return a new array with val appended |
+| `pop`    | 1 | Return a new array with the last element removed |
+| `slc`    | 3 | `slc arr start end` — return a sub-array slice |
+| `flat`   | 1 | Flatten one level of nested arrays |
+
+#### `string` module
+
+| Function | Params | Description |
+|----------|--------|-------------|
+| `cat`    | ≥1 | Concatenate all string arguments |
+| `len`    | 1 | Length of a string |
+| `sub`    | 3 | `sub s start end` — substring |
+| `upr`    | 1 | Convert to uppercase |
+| `lwr`    | 1 | Convert to lowercase |
+| `trm`    | 1 | Trim leading and trailing whitespace |
+| `spl`    | 2 | `spl s delim` — split string by delimiter, returns array |
+| `has`    | 2 | `has s substr` — return true if s contains substr |
+| `rep`    | 3 | `rep s old new` — replace occurrences |
+| `fmt`    | ≥1 | Format string with `{}` placeholders |
+| `num`    | 1 | Parse a string to a number |
+| `tostr`  | 1 | Convert any value to its string representation |
 
 ---
 
@@ -377,6 +530,344 @@ The prompt string (if any) is printed immediately before the read, with no trail
 ```bash
 $ echo -e "10\n20" | tri run calc.tri
 30
+```
+
+---
+
+### Control Flow
+
+All blocks are terminated with `end`.
+
+#### `if` / `elif` / `els` — Conditionals
+
+```tri
+x = 10
+if x > 5
+  say "big"
+elif x == 5
+  say "five"
+els
+  say "small"
+end
+```
+
+Boolean operators `not`, `and`, and `or` can combine conditions:
+
+```tri
+if x > 0 and x < 100
+  say "in range"
+end
+```
+
+#### `for` — Numeric range loop
+
+```tri
+for i 1 5
+  say i        # prints 1 2 3 4 5
+end
+```
+
+#### `whl` — Condition-controlled loop
+
+```tri
+x = 0
+whl x < 3
+  x = x + 1
+  say x
+end
+```
+
+#### `each` — Iterate over a collection
+
+```tri
+arr nums = [10, 20, 30]
+each n nums
+  say n
+end
+```
+
+#### `rpt` — Repeat N times
+
+```tri
+rpt 3
+  say "hello"
+end
+```
+
+#### `brk`, `nxt`, `ret` — Loop and function control
+
+```tri
+for i 1 10
+  if i == 5
+    brk        # exit loop early
+  end
+  say i
+end
+
+fn first_positive nums
+  each n nums
+    if n > 0
+      ret n    # return from function
+    end
+  end
+  ret 0
+end
+```
+
+---
+
+### Data Types
+
+Typed variable declarations use the type keyword followed by the name and an optional `= value` initialiser. Untyped assignment (`x = value`) also works for any value.
+
+#### Strings
+
+```tri
+str name = "Alice"
+say name             # Alice
+say "Hello " + name  # Hello Alice
+```
+
+#### Arrays
+
+```tri
+arr nums = [1, 2, 3, 4, 5]
+each n nums
+  say n
+end
+```
+
+#### Booleans
+
+```tri
+bool ok = true
+bool fail = fls
+if ok
+  say "yes"
+end
+```
+
+#### Nil
+
+```tri
+x = nil
+if x == nil
+  say "no value"
+end
+```
+
+#### Maps
+
+```tri
+map cfg = {key: "value", count: 42}
+```
+
+#### Integers and floats
+
+```tri
+int count = 0
+flt pi = 3.14159
+```
+
+#### Tuples and sets
+
+```tri
+tpl pt = (1, 2)
+set s  = {1, 2, 3, 2, 1}   # {1, 2, 3}
+```
+
+#### Pairs
+
+```tri
+pair p = "name" : "Alice"
+```
+
+#### `let` — Immutable variables
+
+```tri
+let max = 100
+let greeting = "Hello"
+```
+
+Reassigning an immutable variable is a runtime error.
+
+---
+
+### Lambdas
+
+Anonymous functions are created with `lmb`. The syntax is `lmb params -> expr`. A lambda may be assigned to a variable and called like a regular function.
+
+```tri
+let double = lmb x -> x * 2
+double 5 -> emt          # 10
+
+let add = lmb x y -> x + y
+add 3 4 -> emt           # 7
+```
+
+---
+
+### Error Handling
+
+#### `try` / `ctch` — Guarded blocks
+
+```tri
+try
+  thr "something went wrong"
+ctch e
+  say e
+end
+```
+
+#### `thr` — Throw an error
+
+```tri
+thr "Invalid input"
+```
+
+#### `asrt` — Assert a condition
+
+```tri
+asrt x > 0          # aborts with "Assertion failed" if x <= 0
+```
+
+#### `dflt` — Default fallback
+
+The `dflt` operator is an alias for `??` that also covers error values:
+
+```tri
+result dflt 0        # use 0 if result is nil or an error
+```
+
+---
+
+### Module System
+
+#### `use` — Load a module
+
+```tri
+use math
+use io
+use list
+use string
+```
+
+#### `imp` — Import with optional alias
+
+```tri
+imp math
+imp math as m
+```
+
+#### `frm` — Selective import
+
+```tri
+frm math imp sqrt, pow
+```
+
+#### `pkg` and `exp` — Package and export declarations
+
+```tri
+pkg utils
+exp fn add
+```
+
+---
+
+### Developer Tools
+
+#### `say` and `prt` — Print to stdout
+
+```tri
+say "Hello"          # Hello\n
+prt "Prompt: "       # Prompt: (no newline)
+```
+
+Multiple arguments are separated by a space:
+
+```tri
+say "Result:" 42     # Result: 42
+```
+
+#### `dbg`, `log`, `trc` — Diagnostic output to stderr
+
+```tri
+dbg x                # DEBUG: 42
+log "checkpoint"     # LOG: checkpoint
+trc result           # TRACE: 15
+```
+
+#### `tst` — Inline unit test
+
+```tri
+tst "addition" 1 + 1 == 2     # TEST PASSED: addition
+tst "never true" 1 == 0       # TEST FAILED: never true (line N)
+```
+
+#### `chk` — Runtime type check
+
+```tri
+chk name str         # aborts if name is not a string
+chk count int        # aborts if count is not an integer
+```
+
+#### `tim` — Execution timing
+
+```tri
+tim heavy_fn 1000000
+```
+
+#### `doc` — Documentation string
+
+```tri
+doc "Returns x squared"
+fn square x
+  x * x
+end
+```
+
+---
+
+### Exit and Stop
+
+```tri
+ext 0          # exit with status code 0
+ext 1          # exit with status code 1
+stp            # stop immediately (exit code 1)
+```
+
+---
+
+### I/O Keywords
+
+#### `say` / `prt` — Output
+
+```tri
+say "Hello, world!"     # print with newline
+prt "Enter value: "     # print without newline
+```
+
+#### File I/O
+
+```tri
+fwr "out.txt" "line one\n"   # overwrite file
+fap "out.txt" "line two\n"   # append to file
+let contents = frd "out.txt" # read entire file into a string
+```
+
+#### `csv` — Parse a CSV file
+
+```tri
+let rows = csv "data.csv"
+each row rows
+  say row
+end
+```
+
+#### `jrd` — Read a JSON file
+
+```tri
+let cfg = jrd "config.json"
 ```
 
 ---
@@ -526,6 +1017,85 @@ inpt b "Enter b: "
 a + b -> emt
 ```
 
+### Control flow
+
+```tri
+x = 7
+if x > 10
+  say "big"
+elif x > 5
+  say "medium"
+els
+  say "small"
+end
+# Output: medium
+```
+
+### Loops
+
+```tri
+# for loop
+for i 1 3
+  say i
+end
+# Output: 1  2  3
+
+# each loop over an array
+arr items = [10, 20, 30]
+each v items
+  say v
+end
+# Output: 10  20  30
+
+# rpt loop
+rpt 3
+  say "hi"
+end
+# Output: hi  hi  hi
+```
+
+### Lambdas
+
+```tri
+let square = lmb x -> x * x
+square 6 -> emt    # 36
+```
+
+### Error handling
+
+```tri
+try
+  thr "oops"
+ctch e
+  say e
+end
+# Output: oops
+```
+
+### Strings and list module
+
+```tri
+use string
+use list
+
+str greeting = "Hello, World!"
+say len greeting       # 13
+say upr greeting       # HELLO, WORLD!
+
+arr nums = [5, 3, 1, 4, 2]
+let sorted = srt nums
+each n sorted
+  say n                # 1  2  3  4  5
+end
+```
+
+### Inline tests
+
+```tri
+tst "two plus two" 2 + 2 == 4
+tst "sqrt" sqrt 9 == 3
+```
+
 ---
 
 ## Project Structure
@@ -541,8 +1111,10 @@ trionary/
 │   ├── output.c       # Output formatting
 │   ├── error.c        # Centralised error_at() helper
 │   └── modules/
-│       ├── math.c     # Built-in math module (floor, ceil, abs, sqrt, pow)
-│       └── io.c       # Built-in io module (print, read_line)
+│       ├── math.c     # Built-in math module (floor, ceil, abs, sqrt, pow, sin, cos, …)
+│       ├── io.c       # Built-in io module (print, read_line, fex, fls)
+│       ├── list.c     # Built-in list module (srt, rev, cnt, avg, push, pop, …)
+│       └── string.c   # Built-in string module (cat, len, sub, upr, lwr, spl, …)
 ├── include/
 │   ├── reader.h
 │   ├── lexer.h
@@ -571,10 +1143,22 @@ trionary/
 │   ├── test_error.tri        # Error case: missing emit
 │   ├── test_invalid.tri      # Error case: invalid character
 │   └── test_malformed.tri    # Error case: malformed syntax
+├── keywords/
+│   ├── README.md             # Keyword & feature roadmap
+│   ├── A_core_language.md
+│   ├── B_data_types.md
+│   ├── C_standard_functions.md
+│   ├── D_input_output.md
+│   ├── E_control_flow.md
+│   ├── F_functional.md
+│   ├── G_modules.md
+│   ├── H_error_handling.md
+│   ├── I_developer_experience.md
+│   └── J_performance.md
 ├── Makefile
 ├── CHANGELOG.md
 ├── IMPLEMENTATION_SUMMARY.md
-└── plan.md
+└── dine.md
 ```
 
 ---
@@ -605,6 +1189,37 @@ Please keep changes focused and minimal. New language features should follow the
 ---
 
 ## Changelog
+
+### v0.4.0
+
+#### New Features
+
+| # | Feature | Description |
+|---|---------|-------------|
+| 1 | **Control flow** | `if`/`elif`/`els`/`end`, `for var start end`, `whl cond … end`, `each item list … end`, `rpt N … end`. Loop control with `brk`, `nxt`, and `ret`. |
+| 2 | **Boolean and logic operators** | `not`, `and`, `or`, `in`. Boolean literals `true` and `fls`. |
+| 3 | **Rich data types** | `str`, `arr`, `bool`, `int`, `flt`, `map`, `pair`, `tpl`, `set`, `nil`. Typed declarations: `str name = "value"`. |
+| 4 | **Immutable variables (`let`)** | `let x = value` creates a constant; reassignment is a runtime error. |
+| 5 | **First-class lambdas (`lmb`)** | `lmb params -> expr` creates an anonymous function that can be stored in a variable and called like a regular function. |
+| 6 | **Structured error handling** | `try … ctch e … end`, `thr expr`, `asrt condition`, `dflt` fallback operator. |
+| 7 | **Module system expansion** | `imp module`, `imp module as alias`, `frm module imp symbol`. `pkg` declares the package name; `exp` exports a symbol. |
+| 8 | **`list` built-in module** | `use list` provides `srt`, `srtd`, `rev`, `cnt`, `avg`, `unq`, `zip`, `fnd`, `idx`, `push`, `pop`, `slc`, `flat`. |
+| 9 | **`string` built-in module** | `use string` provides `cat`, `len`, `sub`, `upr`, `lwr`, `trm`, `spl`, `has`, `rep`, `fmt`, `num`, `tostr`. |
+| 10 | **Expanded `math` module** | Added `sin`, `cos`, `tan`, `log`, `log10`, `exp`, `mod`, `round`, `min`, `max`, `clmp`, `rnd`, `rndi`. |
+| 11 | **Expanded `io` module** | Added `fex` (path exists) and `fls` (directory listing). |
+| 12 | **I/O keywords** | `say` (print + newline), `prt` (print, no newline), `frd` (file read), `fwr` (file write), `fap` (file append), `csv` (CSV parse), `jrd` (JSON read). |
+| 13 | **Exit control** | `ext N` (exit with status code), `stp` (exit with code 1). |
+| 14 | **Developer tools** | `dbg expr` (DEBUG to stderr), `log expr` (LOG to stderr), `trc expr` (TRACE to stderr), `tst "label" cond` (inline test), `chk expr type` (runtime type check), `tim expr` (wall-clock timing), `doc "string"` (documentation attachment). |
+| 15 | **String concatenation** | The `+` operator concatenates strings. |
+| 16 | **Collection literals** | Array `[1, 2, 3]`, map `{k: v}`, set `{1, 2, 3}`, tuple `(1, 2, 3)`. |
+| 17 | **Pair operator** | `:` creates a `pair` value: `"name" : "Alice"`. |
+| 18 | **`tri version` update** | `tri version` now prints `Trionary v0.4.0`. |
+
+#### Backward Compatibility
+
+All v0.3.x programs run without change. All new keywords are new additions; no existing keyword was removed or renamed.
+
+---
 
 ### v0.3.2
 
