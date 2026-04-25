@@ -1,0 +1,43 @@
+let pi = 3.14
+pi -> emt "pi:"
+
+if 1 > 0
+  emt "Result:" 1
+els
+  emt "Result:" 0
+end
+
+for i 1 3
+  emt "i:" i
+end
+
+x = 0
+whl x < 3
+  x = x + 1
+  emt "x:" x
+end
+
+rpt 2
+  1 -> emt "repeat:"
+end
+
+arr = [10, 20, 30]
+each item arr
+  item -> emt "item:"
+end
+
+if 10 in arr
+  emt "found:" 10
+end
+
+if not (1 > 2)
+  emt "not 1>2:" 1
+end
+
+if 1 > 0 and 2 > 1
+  emt "and:" 1
+end
+
+if 1 > 0 or 1 > 2
+  emt "or:" 1
+end

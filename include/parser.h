@@ -6,18 +6,29 @@
 #define MAX_PARAMS 8
 
 typedef enum {
+    NODE_BLOCK,
     NODE_ARITH,    /* arithmetic expression */
     NODE_ASSIGN,   /* variable assignment   */
     NODE_PIPELINE, /* lst | whn | trn | sum */
     NODE_EMT,      /* emit / output         */
     NODE_FN_DEF,   /* function definition   */
     NODE_USE,      /* use <module> directive */
-    NODE_INPT      /* standalone inpt statement */
+    NODE_INPT,     /* standalone inpt statement */
+    NODE_IF,
+    NODE_FOR,
+    NODE_WHL,
+    NODE_EACH,
+    NODE_RPT,
+    NODE_BRK,
+    NODE_NXT,
+    NODE_RET,
+    NODE_LET
 } NodeType;
 
 typedef enum {
     OP_ADD, OP_SUB, OP_MUL, OP_DIV, OP_POW,
-    OP_GT, OP_LT, OP_GTE, OP_LTE, OP_EQ, OP_NEQ
+    OP_GT, OP_LT, OP_GTE, OP_LTE, OP_EQ, OP_NEQ,
+    OP_AND, OP_OR, OP_NOT, OP_IN
 } OpType;
 
 /* Expression node shared by arithmetic statements and trn expressions. */
@@ -26,7 +37,8 @@ typedef enum {
     EXPR_VARIABLE,
     EXPR_BINARY,
     EXPR_CALL,       /* function call: fn_name(args...) */
-    EXPR_COALESCE    /* left ?? right — if left is undefined, use right */
+    EXPR_COALESCE,   /* left ?? right — if left is undefined, use right */
+    EXPR_LIST        /* [e1, e2, ...] list literal */
 } ExprType;
 
 typedef struct Expr {
@@ -66,8 +78,7 @@ typedef enum {
 typedef struct {
     NodeType      type;
     char          name[64];
-    double        value;         /* used when rhs_type == ASSIGN_NUMBER   */
-    char          rhs_name[64]; /* used when rhs_type == ASSIGN_VARIABLE */
+    Expr*         expr;
     AssignRHSType rhs_type;
     int           line;
 } AssignNode;
@@ -133,23 +144,89 @@ typedef struct {
     int      line;
 } InptNode;
 
+typedef struct ASTNode ASTNode;
+
 typedef struct {
+    ASTNode** nodes;
+    int       count;
+} BlockNode;
+
+typedef struct {
+    Expr*     condition;
+    BlockNode body;
+} ElifBranch;
+
+typedef struct {
+    Expr*       condition;
+    BlockNode   then_block;
+    ElifBranch* elif_branches;
+    int         elif_count;
+    BlockNode   else_block;
+    int         has_else;
+} IfNode;
+
+typedef struct {
+    char      var_name[64];
+    Expr*     start;
+    Expr*     end;
+    BlockNode body;
+} ForNode;
+
+typedef struct {
+    Expr*     condition;
+    BlockNode body;
+} WhlNode;
+
+typedef struct {
+    char      item_name[64];
+    char      list_name[64];
+    BlockNode body;
+} EachNode;
+
+typedef struct {
+    Expr*     count;
+    BlockNode body;
+} RptNode;
+
+typedef struct {
+    Expr* value;
+} RetNode;
+
+typedef struct {
+    char  name[64];
+    Expr* value;
+} LetNode;
+
+typedef struct ASTNode {
     NodeType type;
     union {
-        ArithNode* arith;
-        AssignNode* assign;
+        BlockNode*    block;
+        ArithNode*    arith;
+        AssignNode*   assign;
         PipelineNode* pipeline;
-        FnDefNode* fn_def;
-        UseStmtNode* use_stmt;
-        InptNode* inpt;
+        FnDefNode*    fn_def;
+        UseStmtNode*  use_stmt;
+        InptNode*     inpt;
+        IfNode*       if_node;
+        ForNode*      for_node;
+        WhlNode*      whl_node;
+        EachNode*     each_node;
+        RptNode*      rpt_node;
+        RetNode*      ret_node;
+        LetNode*      let_node;
     } node;
-    enum { STMT_EMTPY, STMT_ARITH, STMT_ASSIGN, STMT_PIPELINE, STMT_FN_DEF, STMT_USE, STMT_INPT } stmt_type;
+    enum { 
+        STMT_EMPTY, STMT_ARITH, STMT_ASSIGN, STMT_PIPELINE, STMT_FN_DEF, 
+        STMT_USE, STMT_INPT, STMT_IF, STMT_FOR, STMT_WHL, STMT_EACH, 
+        STMT_RPT, STMT_BRK, STMT_NXT, STMT_RET, STMT_LET, STMT_BLOCK
+    } stmt_type;
     /* Optional emt label prefix — set for 'emt "label" expr' and 'expr -> emt "label"' (U1) */
     char emt_label[64];
     int  has_emt_label;
 } ASTNode;
 
 ASTNode* parse(Token* tokens, int token_count);
+ASTNode* parse_statement(void);
 void free_ast(ASTNode* ast);
 void free_expr(Expr* expr);
 

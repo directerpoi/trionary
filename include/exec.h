@@ -7,9 +7,26 @@
 /* Number of hash slots per scope level — must be a power of 2. */
 #define SCOPE_CAPACITY 128
 
+typedef enum {
+    VAL_NUMBER,
+    VAL_LIST
+} ValueType;
+
+typedef struct {
+    ValueType type;
+    union {
+        double number;
+        struct {
+            double* elements;
+            int     length;
+        } list;
+    } as;
+    int is_immutable;
+} Value;
+
 typedef struct {
     char   name[64];
-    double value;
+    Value  value;
     int    occupied;
 } ScopeEntry;
 
@@ -25,8 +42,8 @@ typedef struct {
 
 SymTable* create_symtable(void);
 void      free_symtable(SymTable* t);
-void      sym_set(SymTable* t, const char* name, double val);
-double    sym_get(SymTable* t, const char* name);
+void      sym_set(SymTable* t, const char* name, Value val);
+Value     sym_get(SymTable* t, const char* name);
 int       sym_exists(SymTable* t, const char* name);
 
 /* Push a new isolated scope (used by function calls). */
@@ -38,7 +55,7 @@ void scope_pop(SymTable* t);
 #define MAX_FUNCS 64
 
 /* Signature for built-in (C-implemented) functions. */
-typedef double (*BuiltinFn)(double *args, int arg_count);
+typedef Value (*BuiltinFn)(Value *args, int arg_count);
 
 /* Stored function definition (body is a cloned Expr* owned by FuncTable). */
 typedef struct {
@@ -60,9 +77,21 @@ FuncTable* create_functable(void);
 void       free_functable(FuncTable* ft);
 
 /* Built-in module registration — called by exec.c when a 'use' statement runs. */
+typedef enum {
+    STATUS_NORMAL,
+    STATUS_BREAK,
+    STATUS_CONTINUE,
+    STATUS_RETURN
+} ControlStatus;
+
+typedef struct {
+    ControlStatus status;
+    Value         value; /* return value if status is STATUS_RETURN */
+} ExecResult;
+
 void register_math_module(FuncTable *ft);
 void register_io_module(FuncTable *ft);
 
-void execute(ASTNode* ast, SymTable* sym, FuncTable* ft);
+ExecResult execute(ASTNode* ast, SymTable* sym, FuncTable* ft);
 
 #endif

@@ -29,7 +29,22 @@ static int is_keyword(const char* word) {
            strcmp(word, "fn")  == 0 ||
            strcmp(word, "end") == 0 ||
            strcmp(word, "use") == 0 ||
-           strcmp(word, "inpt") == 0;
+           strcmp(word, "inpt") == 0 ||
+           strcmp(word, "if") == 0 ||
+           strcmp(word, "els") == 0 ||
+           strcmp(word, "elif") == 0 ||
+           strcmp(word, "for") == 0 ||
+           strcmp(word, "whl") == 0 ||
+           strcmp(word, "each") == 0 ||
+           strcmp(word, "brk") == 0 ||
+           strcmp(word, "nxt") == 0 ||
+           strcmp(word, "ret") == 0 ||
+           strcmp(word, "not") == 0 ||
+           strcmp(word, "and") == 0 ||
+           strcmp(word, "or") == 0 ||
+           strcmp(word, "in") == 0 ||
+           strcmp(word, "let") == 0 ||
+           strcmp(word, "rpt") == 0;
 }
 
 static TokenType keyword_type(const char* word) {
@@ -42,6 +57,21 @@ static TokenType keyword_type(const char* word) {
     if (strcmp(word, "end") == 0) return TOK_END;
     if (strcmp(word, "use") == 0) return TOK_USE;
     if (strcmp(word, "inpt") == 0) return TOK_INPT;
+    if (strcmp(word, "if") == 0) return TOK_IF;
+    if (strcmp(word, "els") == 0) return TOK_ELS;
+    if (strcmp(word, "elif") == 0) return TOK_ELIF;
+    if (strcmp(word, "for") == 0) return TOK_FOR;
+    if (strcmp(word, "whl") == 0) return TOK_WHL;
+    if (strcmp(word, "each") == 0) return TOK_EACH;
+    if (strcmp(word, "brk") == 0) return TOK_BRK;
+    if (strcmp(word, "nxt") == 0) return TOK_NXT;
+    if (strcmp(word, "ret") == 0) return TOK_RET;
+    if (strcmp(word, "not") == 0) return TOK_NOT;
+    if (strcmp(word, "and") == 0) return TOK_AND;
+    if (strcmp(word, "or") == 0) return TOK_OR;
+    if (strcmp(word, "in") == 0) return TOK_IN;
+    if (strcmp(word, "let") == 0) return TOK_LET;
+    if (strcmp(word, "rpt") == 0) return TOK_RPT;
     return TOK_ERROR;
 }
 
@@ -146,6 +176,18 @@ Token* tokenise(const char* src, int* count) {
 
         if (src[i] == ']') {
             tokens[n++] = make_token(TOK_RBRACK, "]", col);
+            i++; col++;
+            continue;
+        }
+
+        if (src[i] == '(') {
+            tokens[n++] = make_token(TOK_OP, "(", col);
+            i++; col++;
+            continue;
+        }
+
+        if (src[i] == ')') {
+            tokens[n++] = make_token(TOK_OP, ")", col);
             i++; col++;
             continue;
         }
