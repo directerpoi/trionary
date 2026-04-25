@@ -120,3 +120,56 @@ Implemented a comprehensive suite of standard functions for math, list, and stri
 - **I/O Node Type:** Added `IONode` to AST and `STMT_IO` / `EXPR_IO` to handle keyword-based I/O.
 - **Improved Print:** `print` now accepts multiple arguments and separates them with spaces.
 
+---
+
+# v1.0.0 Control Flow, Modules & Error Handling
+
+## What Was Done
+
+Implemented advanced language features including explicit control flow, first-class functions (lambdas), a robust module system, structured error handling, and performance/DX tools.
+
+## New Keywords
+
+| Keyword | Category | Description | Example |
+|---------|----------|-------------|---------|
+| `ext` | Control | Exit the program with status code | `ext 0` |
+| `stp` | Control | Stop program immediately (exit 1) | `stp` |
+| `lmb` | Functional | Define anonymous lambda function | `lmb x -> x * 2` |
+| `imp` | Modules | Import a module (alias for `use`) | `imp math` |
+| `as` | Modules | Alias a module or symbol | `imp math as m` |
+| `frm` | Modules | Selective import | `frm math imp sqrt` |
+| `try` | Errors | Start a guarded block | `try` |
+| `ctch` | Errors | Catch block for `try` | `ctch e` |
+| `thr` | Errors | Throw a runtime error | `thr "Invalid input"` |
+| `err` | Errors | Create a named error value | `let e = err "msg"` |
+| `asrt` | Errors | Assert condition; abort on failure | `asrt x > 0` |
+| `dflt` | DX | Default fallback (handles nil/error) | `x dflt 0` |
+| `dbg` | DX | Debug dump to stderr | `dbg x` |
+| `log` | DX | Labeled log to stderr | `log "reached"` |
+| `tst` | DX | Inline unit test declaration | `tst "add" 1+1==2` |
+| `trc` | DX | Trace execution to stderr | `trc on` |
+| `doc` | DX | Attach documentation to function | `doc "Adds two"` |
+| `pkg` | Modules | Declare package name | `pkg utils` |
+| `exp` | Modules | Export a symbol | `exp fn add` |
+| `chk` | DX | Runtime type check | `chk x str` |
+| `tim` | Performance| Measure execution time | `tim heavy_fn()` |
+
+## New Core Functions
+
+- `ok(val)`: Returns `true` if `val` is not an error.
+- `typ(val)`: Returns the type name of `val` as a string.
+
+## Technical Changes
+
+### Control Flow Evolution
+- **Recoverable Errors:** Introduced `VAL_ERROR` type and `STATUS_ERROR` control status, allowing `try`/`ctch` to intercept and handle runtime errors.
+- **First-Class Functions:** Lambdas (`lmb`) now capture their defining scope (simple closure) and can be passed as values or assigned to variables.
+
+### Module System
+- **Namespacing:** Added support for dot-notation in identifiers (e.g., `math.sqrt`) and module aliasing using `as`.
+- **Selective Imports:** `frm module imp symbol` syntax for granular control.
+
+### Developer Experience (DX)
+- **High-Resolution Timing:** The `tim` keyword uses monotonic clock to provide accurate wall-clock execution time.
+- **Enhanced Diagnostics:** `dbg`, `log`, and `trc` provide lightweight ways to inspect program state without cluttering standard output.
+

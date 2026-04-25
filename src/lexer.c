@@ -64,7 +64,28 @@ static int is_keyword(const char* word) {
            strcmp(word, "flt") == 0 ||
            strcmp(word, "pair") == 0 ||
            strcmp(word, "tpl") == 0 ||
-           strcmp(word, "set") == 0;
+           strcmp(word, "set") == 0 ||
+           strcmp(word, "ext") == 0 ||
+           strcmp(word, "stp") == 0 ||
+           strcmp(word, "lmb") == 0 ||
+           strcmp(word, "imp") == 0 ||
+           strcmp(word, "as")  == 0 ||
+           strcmp(word, "frm") == 0 ||
+           strcmp(word, "exp") == 0 ||
+           strcmp(word, "pkg") == 0 ||
+           strcmp(word, "try") == 0 ||
+           strcmp(word, "ctch") == 0 ||
+           strcmp(word, "thr") == 0 ||
+           strcmp(word, "err") == 0 ||
+           strcmp(word, "asrt") == 0 ||
+           strcmp(word, "dflt") == 0 ||
+           strcmp(word, "dbg") == 0 ||
+           strcmp(word, "log") == 0 ||
+           strcmp(word, "tst") == 0 ||
+           strcmp(word, "trc") == 0 ||
+           strcmp(word, "doc") == 0 ||
+           strcmp(word, "chk") == 0 ||
+           strcmp(word, "tim") == 0;
 }
 
 static TokenType keyword_type(const char* word) {
@@ -80,6 +101,27 @@ static TokenType keyword_type(const char* word) {
     if (strcmp(word, "say") == 0) return TOK_SAY;
     if (strcmp(word, "prt") == 0) return TOK_PRT;
     if (strcmp(word, "ask") == 0) return TOK_ASK;
+    if (strcmp(word, "ext") == 0) return TOK_EXT;
+    if (strcmp(word, "stp") == 0) return TOK_STP;
+    if (strcmp(word, "lmb") == 0) return TOK_LMB;
+    if (strcmp(word, "imp") == 0) return TOK_IMP;
+    if (strcmp(word, "as")  == 0) return TOK_AS;
+    if (strcmp(word, "frm") == 0) return TOK_FRM;
+    if (strcmp(word, "exp") == 0) return TOK_EXP;
+    if (strcmp(word, "pkg") == 0) return TOK_PKG;
+    if (strcmp(word, "try") == 0) return TOK_TRY;
+    if (strcmp(word, "ctch") == 0) return TOK_CTCH;
+    if (strcmp(word, "thr") == 0) return TOK_THR;
+    if (strcmp(word, "err") == 0) return TOK_ERR;
+    if (strcmp(word, "asrt") == 0) return TOK_ASRT;
+    if (strcmp(word, "dflt") == 0) return TOK_DFLT;
+    if (strcmp(word, "dbg") == 0) return TOK_DBG;
+    if (strcmp(word, "log") == 0) return TOK_LOG;
+    if (strcmp(word, "tst") == 0) return TOK_TST;
+    if (strcmp(word, "trc") == 0) return TOK_TRC;
+    if (strcmp(word, "doc") == 0) return TOK_DOC;
+    if (strcmp(word, "chk") == 0) return TOK_CHK;
+    if (strcmp(word, "tim") == 0) return TOK_TIM;
     if (strcmp(word, "frd") == 0) return TOK_FRD;
     if (strcmp(word, "fwr") == 0) return TOK_FWR;
     if (strcmp(word, "fap") == 0) return TOK_FAP;
@@ -252,6 +294,12 @@ Token* tokenise(const char* src, int* count) {
 
         if (src[i] == ',') {
             tokens[n++] = make_token(TOK_COMMA, ",", col);
+            i++; col++;
+            continue;
+        }
+
+        if (src[i] == '.') {
+            tokens[n++] = make_token(TOK_DOT, ".", col);
             i++; col++;
             continue;
         }
