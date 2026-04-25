@@ -6,18 +6,18 @@
 #include <string.h>
 #include <ctype.h>
 
-static int current = 0;
-static Token* tokens;
-static int token_count;
+int current_pos = 0;
+Token* global_tokens;
+int global_token_count;
 
 static Token peek() {
-    if (current >= token_count) return tokens[token_count - 1];
-    return tokens[current];
+    if (current_pos >= global_token_count) return global_tokens[global_token_count - 1];
+    return global_tokens[current_pos];
 }
 
 static Token advance() {
-    if (current < token_count) current++;
-    return tokens[current - 1];
+    if (current_pos < global_token_count) current_pos++;
+    return global_tokens[current_pos - 1];
 }
 
 static int match(TokenType type) {
@@ -26,6 +26,10 @@ static int match(TokenType type) {
         return 1;
     }
     return 0;
+}
+
+static void skip_newlines() {
+    while (peek().type == TOK_NEWLINE) advance();
 }
 
 static OpType get_op_type(const char* op) {
@@ -40,562 +44,392 @@ static OpType get_op_type(const char* op) {
     if (strcmp(op, "<=") == 0) return OP_LTE;
     if (strcmp(op, "==") == 0) return OP_EQ;
     if (strcmp(op, "!=") == 0) return OP_NEQ;
+    if (strcmp(op, "and") == 0) return OP_AND;
+    if (strcmp(op, "or") == 0) return OP_OR;
+    if (strcmp(op, "not") == 0) return OP_NOT;
+    if (strcmp(op, "in") == 0) return OP_IN;
     return OP_ADD;
 }
 
 static Expr* create_expr(ExprType type) {
-    Expr* expr = malloc(sizeof(Expr));
+    Expr* expr = calloc(1, sizeof(Expr));
     expr->type = type;
-    expr->line = 0;
-    expr->col  = 0;
     return expr;
 }
 
+static Expr* parse_coalesce();
+
 static Expr* parse_primary() {
     Expr* expr;
-
     if (match(TOK_NUMBER)) {
         expr = create_expr(EXPR_NUMBER);
-        expr->num_val = atof(tokens[current - 1].lexeme);
-        expr->line = tokens[current - 1].line;
-        expr->col  = tokens[current - 1].col;
-    } else if (peek().type == TOK_IDENT || peek().type == TOK_VAR_REF) {
-        TokenType matched_type = peek().type;
+        expr->num_val = atof(global_tokens[current_pos - 1].lexeme);
+        expr->line = global_tokens[current_pos - 1].line;
+        expr->col  = global_tokens[current_pos - 1].col;
+    } else if (peek().type == TOK_OP && strcmp(peek().lexeme, "(") == 0) {
         advance();
-        int name_line = tokens[current - 1].line;
-        int name_col  = tokens[current - 1].col;
-        char name[64];
-        strncpy(name, tokens[current - 1].lexeme, 63);
-        name[63] = '\0';
-
-        /* Function call: plain IDENT (not VAR_REF) followed by one or more
-           NUMBER/IDENT arguments.  VAR_REF tokens are always variable refs
-           because they follow an operator character without whitespace. */
-        if (matched_type == TOK_IDENT &&
-            current < token_count &&
-            (peek().type == TOK_NUMBER || peek().type == TOK_IDENT)) {
+        expr = parse_coalesce();
+        if (peek().type == TOK_OP && strcmp(peek().lexeme, ")") == 0) advance();
+        else error_at(peek().line, "Expected ')' after expression");
+    } else if (match(TOK_LBRACK)) {
+        expr = create_expr(EXPR_LIST);
+        expr->line = global_tokens[current_pos - 1].line;
+        expr->col = global_tokens[current_pos - 1].col;
+        if (peek().type != TOK_RBRACK) {
+            do {
+                if (expr->arg_count < MAX_PARAMS) {
+                    expr->args[expr->arg_count++] = parse_coalesce();
+                } else error_at(peek().line, "Too many elements in list literal");
+            } while (peek().type == TOK_OP && strcmp(peek().lexeme, ",") == 0 && advance().type == TOK_OP);
+        }
+        if (!match(TOK_RBRACK)) error_at(peek().line, "Expected ']' after list literal");
+    } else if (peek().type == TOK_IDENT || peek().type == TOK_VAR_REF) {
+        Token t = advance();
+        if (t.type == TOK_IDENT && (peek().type == TOK_NUMBER || peek().type == TOK_IDENT || 
+            (peek().type == TOK_OP && strcmp(peek().lexeme, "(") == 0) || peek().type == TOK_LBRACK)) {
             expr = create_expr(EXPR_CALL);
-            strncpy(expr->var_name, name, 63);
-            expr->var_name[63] = '\0';
-            expr->arg_count = 0;
-            expr->line = name_line;
-            expr->col  = name_col;
-
-            while (expr->arg_count < MAX_PARAMS &&
-                   current < token_count &&
-                   (peek().type == TOK_NUMBER || peek().type == TOK_IDENT)) {
-                advance();
-                Expr* arg;
-                if (tokens[current - 1].type == TOK_NUMBER) {
-                    arg = create_expr(EXPR_NUMBER);
-                    arg->num_val = atof(tokens[current - 1].lexeme);
+            strncpy(expr->var_name, t.lexeme, 63);
+            expr->line = t.line; expr->col = t.col;
+            while (expr->arg_count < MAX_PARAMS && (peek().type == TOK_NUMBER || peek().type == TOK_IDENT || 
+                   (peek().type == TOK_OP && strcmp(peek().lexeme, "(") == 0) || peek().type == TOK_LBRACK)) {
+                if (peek().type == TOK_OP && strcmp(peek().lexeme, "(") == 0) {
+                    expr->args[expr->arg_count++] = parse_primary();
+                } else if (peek().type == TOK_LBRACK) {
+                    expr->args[expr->arg_count++] = parse_primary();
                 } else {
-                    arg = create_expr(EXPR_VARIABLE);
-                    strncpy(arg->var_name, tokens[current - 1].lexeme, 63);
-                    arg->var_name[63] = '\0';
+                    Token arg_t = advance();
+                    Expr* arg;
+                    if (arg_t.type == TOK_NUMBER) {
+                        arg = create_expr(EXPR_NUMBER);
+                        arg->num_val = atof(arg_t.lexeme);
+                    } else {
+                        arg = create_expr(EXPR_VARIABLE);
+                        strncpy(arg->var_name, arg_t.lexeme, 63);
+                    }
+                    arg->line = arg_t.line; arg->col = arg_t.col;
+                    expr->args[expr->arg_count++] = arg;
                 }
-                arg->line = tokens[current - 1].line;
-                arg->col  = tokens[current - 1].col;
-                expr->args[expr->arg_count++] = arg;
             }
         } else {
             expr = create_expr(EXPR_VARIABLE);
-            strncpy(expr->var_name, name, 63);
-            expr->var_name[63] = '\0';
-            expr->line = name_line;
-            expr->col  = name_col;
+            strncpy(expr->var_name, t.lexeme, 63);
+            expr->line = t.line; expr->col = t.col;
         }
     } else {
         set_error_col(peek().col);
         error_at(peek().line, "Expected number or identifier");
         expr = create_expr(EXPR_NUMBER);
-        expr->num_val = 0;
-        expr->line = peek().line;
     }
-
     return expr;
 }
 
-static Expr* parse_factor() {
+static Expr* parse_unary() {
+    if (match(TOK_NOT)) {
+        Expr* expr = create_expr(EXPR_BINARY);
+        expr->op = OP_NOT;
+        expr->line = global_tokens[current_pos - 1].line;
+        expr->left = parse_unary();
+        return expr;
+    }
     return parse_primary();
 }
 
-static Expr* parse_term() {
-    Expr* left = parse_factor();
-    
-    while (match(TOK_OP)) {
-        char op[4];
-        strncpy(op, tokens[current - 1].lexeme, 3);
-        op[3] = '\0';
-        
-        if (strcmp(op, "*") == 0 || strcmp(op, "/") == 0) {
-            Expr* expr = create_expr(EXPR_BINARY);
-            expr->op = get_op_type(op);
-            expr->left = left;
-            expr->right = parse_factor();
-            left = expr;
-        } else {
-            current--;
-            break;
-        }
+static Expr* parse_pow() {
+    Expr* left = parse_unary();
+    while (peek().type == TOK_OP && strcmp(peek().lexeme, "^") == 0) {
+        advance();
+        Expr* expr = create_expr(EXPR_BINARY);
+        expr->op = OP_POW;
+        expr->left = left;
+        expr->right = parse_unary();
+        left = expr;
     }
-    
     return left;
 }
 
-static Expr* parse_expr() {
-    Expr* left = parse_term();
-    
-    while (match(TOK_OP)) {
-        char op[4];
-        strncpy(op, tokens[current - 1].lexeme, 3);
-        op[3] = '\0';
-        
-        if (strcmp(op, "+") == 0 || strcmp(op, "-") == 0) {
-            Expr* expr = create_expr(EXPR_BINARY);
-            expr->op = get_op_type(op);
-            expr->left = left;
-            expr->right = parse_term();
-            left = expr;
-        } else {
-            current--;
-            break;
-        }
+static Expr* parse_multiplicative() {
+    Expr* left = parse_pow();
+    while (peek().type == TOK_OP && (strcmp(peek().lexeme, "*") == 0 || strcmp(peek().lexeme, "/") == 0)) {
+        Expr* expr = create_expr(EXPR_BINARY);
+        expr->op = get_op_type(advance().lexeme);
+        expr->left = left;
+        expr->right = parse_pow();
+        left = expr;
     }
-    
     return left;
 }
 
-/* Lowest-precedence expression: handles the ?? (coalesce) operator.
-   left ?? right — evaluates to left if left is a defined variable,
-   otherwise evaluates to right.  Right-associative. */
+static Expr* parse_additive() {
+    Expr* left = parse_multiplicative();
+    while (peek().type == TOK_OP && (strcmp(peek().lexeme, "+") == 0 || strcmp(peek().lexeme, "-") == 0)) {
+        Expr* expr = create_expr(EXPR_BINARY);
+        expr->op = get_op_type(advance().lexeme);
+        expr->left = left;
+        expr->right = parse_multiplicative();
+        left = expr;
+    }
+    return left;
+}
+
+static Expr* parse_comparison() {
+    Expr* left = parse_additive();
+    while (1) {
+        if (peek().type == TOK_OP && (strcmp(peek().lexeme, ">") == 0 || strcmp(peek().lexeme, "<") == 0 ||
+            strcmp(peek().lexeme, ">=") == 0 || strcmp(peek().lexeme, "<=") == 0 ||
+            strcmp(peek().lexeme, "==") == 0 || strcmp(peek().lexeme, "!=") == 0)) {
+            Expr* expr = create_expr(EXPR_BINARY);
+            expr->op = get_op_type(advance().lexeme);
+            expr->left = left;
+            expr->right = parse_additive();
+            left = expr;
+        } else if (match(TOK_IN)) {
+            Expr* expr = create_expr(EXPR_BINARY);
+            expr->op = OP_IN;
+            expr->left = left;
+            expr->right = parse_additive();
+            left = expr;
+        } else break;
+    }
+    return left;
+}
+
+static Expr* parse_and() {
+    Expr* left = parse_comparison();
+    while (match(TOK_AND)) {
+        Expr* expr = create_expr(EXPR_BINARY);
+        expr->op = OP_AND;
+        expr->left = left;
+        expr->right = parse_comparison();
+        left = expr;
+    }
+    return left;
+}
+
+static Expr* parse_or() {
+    Expr* left = parse_and();
+    while (match(TOK_OR)) {
+        Expr* expr = create_expr(EXPR_BINARY);
+        expr->op = OP_OR;
+        expr->left = left;
+        expr->right = parse_and();
+        left = expr;
+    }
+    return left;
+}
+
 static Expr* parse_coalesce() {
-    Expr* left = parse_expr();
-
-    if (current < token_count && peek().type == TOK_COALESCE) {
-        int coalesce_line = peek().line;
-        advance(); /* consume ?? */
-        Expr* right = parse_coalesce(); /* right-associative */
+    Expr* left = parse_or();
+    if (match(TOK_COALESCE)) {
         Expr* expr = create_expr(EXPR_COALESCE);
-        expr->left  = left;
-        expr->right = right;
-        expr->line  = coalesce_line;
+        expr->left = left;
+        expr->right = parse_coalesce();
         return expr;
     }
-
     return left;
 }
 
-void free_expr(Expr* expr) {
-    if (!expr) return;
-    if (expr->type == EXPR_BINARY) {
-        free_expr(expr->left);
-        free_expr(expr->right);
-    } else if (expr->type == EXPR_CALL) {
-        for (int i = 0; i < expr->arg_count; i++)
-            free_expr(expr->args[i]);
-    } else if (expr->type == EXPR_COALESCE) {
-        free_expr(expr->left);
-        free_expr(expr->right);
+ASTNode* parse_statement(void);
+
+static BlockNode parse_block() {
+    BlockNode block = {NULL, 0};
+    while (peek().type != TOK_EOF && peek().type != TOK_END && peek().type != TOK_ELS && peek().type != TOK_ELIF) {
+        if (match(TOK_NEWLINE)) continue;
+        ASTNode* stmt = parse_statement();
+        if (stmt) {
+            block.nodes = realloc(block.nodes, (block.count + 1) * sizeof(ASTNode*));
+            block.nodes[block.count++] = stmt;
+        }
     }
-    free(expr);
+    return block;
 }
 
-static AssignNode* parse_assign() {
-    AssignNode* node = malloc(sizeof(AssignNode));
-    node->type = NODE_ASSIGN;
-    node->line = peek().line;
-
-    if (!match(TOK_IDENT)) {
-        error_at(peek().line, "Expected identifier in assignment");
-        return node;
-    }
-    strncpy(node->name, tokens[current - 1].lexeme, 63);
-    node->name[63] = '\0';
-    node->line = tokens[current - 1].line;
-
-    if (!match(TOK_ASSIGN)) {
-        error_at(peek().line, "Expected '=' in assignment");
-        return node;
-    }
-
-    if (match(TOK_NUMBER)) {
-        node->rhs_type = ASSIGN_NUMBER;
-        node->value = atof(tokens[current - 1].lexeme);
-    } else if (match(TOK_IDENT)) {
-        node->rhs_type = ASSIGN_VARIABLE;
-        strncpy(node->rhs_name, tokens[current - 1].lexeme, 63);
-        node->rhs_name[63] = '\0';
+ASTNode* parse_statement() {
+    ASTNode* node = calloc(1, sizeof(ASTNode));
+    if (peek().type == TOK_IDENT && current_pos + 1 < global_token_count && global_tokens[current_pos+1].type == TOK_ASSIGN) {
+        if (current_pos + 2 >= global_token_count || global_tokens[current_pos+2].type == TOK_NEWLINE || global_tokens[current_pos+2].type == TOK_EOF) {
+            return NULL;
+        }
+        node->stmt_type = STMT_ASSIGN;
+        AssignNode* assign = calloc(1, sizeof(AssignNode));
+        assign->line = peek().line;
+        strncpy(assign->name, advance().lexeme, 63); advance(); // =
+        if (peek().type == TOK_INPT) { advance(); assign->rhs_type = ASSIGN_INPUT; }
+        else assign->expr = parse_coalesce();
+        node->node.assign = assign;
+    } else if (match(TOK_LET)) {
+        node->stmt_type = STMT_LET;
+        LetNode* let = calloc(1, sizeof(LetNode));
+        if (match(TOK_IDENT)) strncpy(let->name, global_tokens[current_pos-1].lexeme, 63);
+        if (match(TOK_ASSIGN)) let->value = parse_coalesce();
+        node->node.let_node = let;
+    } else if (match(TOK_IF)) {
+        node->stmt_type = STMT_IF;
+        node->node.if_node = calloc(1, sizeof(IfNode));
+        node->node.if_node->condition = parse_coalesce();
+        skip_newlines(); node->node.if_node->then_block = parse_block();
+        while (match(TOK_ELIF)) {
+            int i = node->node.if_node->elif_count++;
+            node->node.if_node->elif_branches = realloc(node->node.if_node->elif_branches, node->node.if_node->elif_count * sizeof(ElifBranch));
+            node->node.if_node->elif_branches[i].condition = parse_coalesce();
+            skip_newlines(); node->node.if_node->elif_branches[i].body = parse_block();
+        }
+        if (match(TOK_ELS)) { skip_newlines(); node->node.if_node->else_block = parse_block(); node->node.if_node->has_else = 1; }
+        if (!match(TOK_END)) error_at(peek().line, "Expected 'end' after if");
+    } else if (match(TOK_FOR)) {
+        node->stmt_type = STMT_FOR; ForNode* f = node->node.for_node = calloc(1, sizeof(ForNode));
+        if (match(TOK_IDENT)) strncpy(f->var_name, global_tokens[current_pos-1].lexeme, 63);
+        f->start = parse_coalesce(); f->end = parse_coalesce();
+        skip_newlines(); f->body = parse_block();
+        if (!match(TOK_END)) error_at(peek().line, "Expected 'end' after for");
+    } else if (match(TOK_WHL)) {
+        node->stmt_type = STMT_WHL; WhlNode* w = node->node.whl_node = calloc(1, sizeof(WhlNode));
+        w->condition = parse_coalesce(); skip_newlines(); w->body = parse_block();
+        if (!match(TOK_END)) error_at(peek().line, "Expected 'end' after whl");
+    } else if (match(TOK_EACH)) {
+        node->stmt_type = STMT_EACH; EachNode* e = node->node.each_node = calloc(1, sizeof(EachNode));
+        if (match(TOK_IDENT)) strncpy(e->item_name, global_tokens[current_pos-1].lexeme, 63);
+        if (match(TOK_IDENT)) strncpy(e->list_name, global_tokens[current_pos-1].lexeme, 63);
+        skip_newlines(); e->body = parse_block();
+        if (!match(TOK_END)) error_at(peek().line, "Expected 'end' after each");
+    } else if (match(TOK_RPT)) {
+        node->stmt_type = STMT_RPT; RptNode* r = node->node.rpt_node = calloc(1, sizeof(RptNode));
+        r->count = parse_coalesce(); skip_newlines(); r->body = parse_block();
+        if (!match(TOK_END)) error_at(peek().line, "Expected 'end' after rpt");
+    } else if (match(TOK_BRK)) node->stmt_type = STMT_BRK;
+    else if (match(TOK_NXT)) node->stmt_type = STMT_NXT;
+    else if (match(TOK_RET)) {
+        node->stmt_type = STMT_RET; node->node.ret_node = calloc(1, sizeof(RetNode));
+        if (peek().type != TOK_NEWLINE && peek().type != TOK_EOF && peek().type != TOK_END) node->node.ret_node->value = parse_coalesce();
+    } else if (match(TOK_FN)) {
+        node->stmt_type = STMT_FN_DEF; FnDefNode* f = node->node.fn_def = calloc(1, sizeof(FnDefNode));
+        if (match(TOK_IDENT)) strncpy(f->name, global_tokens[current_pos-1].lexeme, 63);
+        while (peek().type == TOK_IDENT && f->param_count < MAX_PARAMS) strncpy(f->params[f->param_count++], advance().lexeme, 63);
+        skip_newlines(); f->body = parse_coalesce(); skip_newlines();
+        if (!match(TOK_END)) error_at(peek().line, "Expected 'end' after fn");
+    } else if (match(TOK_USE)) {
+        node->stmt_type = STMT_USE; node->node.use_stmt = calloc(1, sizeof(UseStmtNode));
+        if (match(TOK_IDENT)) strncpy(node->node.use_stmt->module_name, global_tokens[current_pos-1].lexeme, 63);
     } else if (match(TOK_INPT)) {
-        node->rhs_type = ASSIGN_INPUT;
+        node->stmt_type = STMT_INPT; InptNode* in = node->node.inpt = calloc(1, sizeof(InptNode));
+        in->line = global_tokens[current_pos-1].line;
+        if (match(TOK_IDENT)) strncpy(in->var_name, global_tokens[current_pos-1].lexeme, 63);
+        if (peek().type == TOK_STRING) { strncpy(in->prompt, advance().lexeme, 63); in->has_prompt = 1; }
+    } else if (match(TOK_LST)) {
+        int line = global_tokens[current_pos-1].line;
+        node->stmt_type = STMT_PIPELINE; PipelineNode* p = node->node.pipeline = calloc(1, sizeof(PipelineNode));
+        p->line = line; match(TOK_LBRACK);
+        p->list = malloc(256 * sizeof(double));
+        if (peek().type == TOK_NUMBER) {
+            do { if (match(TOK_NUMBER)) p->list[p->list_len++] = atof(global_tokens[current_pos-1].lexeme);
+            } while (peek().type == TOK_OP && strcmp(peek().lexeme, ",") == 0 && advance().type == TOK_OP);
+        }
+        match(TOK_RBRACK); skip_newlines();
+        while (match(TOK_PIPE) || peek().type == TOK_WHN || peek().type == TOK_TRN || peek().type == TOK_SUM) {
+            skip_newlines();
+            if (match(TOK_WHN)) {
+                Condition* c = p->filter = calloc(1, sizeof(Condition)); p->has_filter = 1;
+                if (match(TOK_OP)) { strncpy(c->op_lexeme, global_tokens[current_pos-1].lexeme, 3); c->op = get_op_type(c->op_lexeme); }
+                if (match(TOK_NUMBER)) c->value = atof(global_tokens[current_pos-1].lexeme);
+                else if (peek().type == TOK_IDENT || peek().type == TOK_VAR_REF) { c->is_variable = 1; strncpy(c->var_name, advance().lexeme, 63); }
+            } else if (match(TOK_TRN)) {
+                Transform* t = calloc(1, sizeof(Transform)); p->has_transform = 1;
+                if (match(TOK_OP)) { strncpy(t->op_lexeme, global_tokens[current_pos-1].lexeme, 3); t->op = get_op_type(t->op_lexeme); }
+                t->expr = parse_coalesce();
+                p->transforms = realloc(p->transforms, (p->transform_count + 1) * sizeof(Transform*));
+                p->transforms[p->transform_count++] = t;
+            } else if (match(TOK_SUM)) p->has_sum = 1;
+            skip_newlines();
+        }
+        if (match(TOK_EMT) || (match(TOK_ARROW) && match(TOK_EMT))) {
+            if (peek().type == TOK_STRING) { strncpy(p->emt_label, advance().lexeme, 63); p->has_emt_label = 1; }
+            if (peek().type == TOK_IDENT && strcmp(peek().lexeme, "sep") == 0) {
+                advance(); if (peek().type == TOK_STRING) { strncpy(p->emt_sep, advance().lexeme, 63); p->has_emt_sep = 1; }
+            }
+        }
+    } else if (match(TOK_EMT)) {
+        if (peek().type == TOK_STRING) { strncpy(node->emt_label, advance().lexeme, 63); node->has_emt_label = 1; }
+        node->stmt_type = STMT_ARITH; node->node.arith = (ArithNode*)parse_coalesce();
+    } else if (peek().type == TOK_NUMBER || peek().type == TOK_IDENT || peek().type == TOK_VAR_REF || peek().type == TOK_LBRACK || peek().type == TOK_NOT) {
+        if (peek().type == TOK_IDENT) {
+            const char* sug = suggest_keyword(peek().lexeme);
+            if (sug) {
+                char hint[128]; snprintf(hint, 128, "Did you mean '%s'?", sug);
+                set_error_hint(hint); set_error_col(peek().col);
+                error_at(peek().line, "Unknown keyword '%s'", peek().lexeme);
+            }
+        }
+        node->stmt_type = STMT_ARITH; node->node.arith = (ArithNode*)parse_coalesce();
+        if (match(TOK_ARROW) && match(TOK_EMT)) {
+            if (peek().type == TOK_STRING) { strncpy(node->emt_label, advance().lexeme, 63); node->has_emt_label = 1; }
+        }
     } else {
-        error_at(peek().line, "Expected number, identifier, or 'inpt' in assignment");
+        /* Do not report error here; let main.c handle skipping unknown tokens. */
+        return NULL;
     }
-
-    return node;
-}
-
-static PipelineNode* parse_pipeline(int lst_line) {
-    PipelineNode* node = malloc(sizeof(PipelineNode));
-    node->type = NODE_PIPELINE;
-    node->list = NULL;
-    node->list_len = 0;
-    node->filter = NULL;
-    node->transforms = NULL;
-    node->transform_count = 0;
-    node->has_filter = 0;
-    node->has_transform = 0;
-    node->has_sum = 0;
-    node->line = lst_line;
-    node->emt_label[0] = '\0';
-    node->has_emt_label = 0;
-    node->emt_sep[0] = '\0';
-    node->has_emt_sep = 0;
-
-    if (!match(TOK_LBRACK)) {
-        error_at(peek().line, "Expected '[' after 'lst'");
-        return node;
-    }
-
-    double* values = malloc(256 * sizeof(double));
-    int val_count = 0;
-
-    if (match(TOK_NUMBER)) {
-        values[val_count++] = atof(tokens[current - 1].lexeme);
-
-        while (match(TOK_OP)) {
-            if (strcmp(tokens[current - 1].lexeme, ",") == 0) {
-                if (!match(TOK_NUMBER)) {
-                    error_at(peek().line, "Expected number after ','");
-                    free(values);
-                    return node;
-                }
-                values[val_count++] = atof(tokens[current - 1].lexeme);
-            } else {
-                current--;
-                break;
-            }
-        }
-    }
-
-    if (!match(TOK_RBRACK)) {
-        error_at(peek().line, "Expected ']' after list");
-        free(values);
-        return node;
-    }
-
-    node->list = values;
-    node->list_len = val_count;
-
-    while (match(TOK_PIPE)) {
-        if (match(TOK_WHN)) {
-            int cond_line = tokens[current - 1].line;
-            if (!match(TOK_OP)) {
-                error_at(peek().line, "Expected operator after 'whn'");
-                return node;
-            }
-
-            Condition* cond = malloc(sizeof(Condition));
-            strncpy(cond->op_lexeme, tokens[current - 1].lexeme, 3);
-            cond->op_lexeme[3] = '\0';
-            cond->op = get_op_type(cond->op_lexeme);
-            cond->line = cond_line;
-            cond->is_variable = 0;
-            cond->var_name[0] = '\0';
-
-            if (match(TOK_NUMBER)) {
-                cond->value = atof(tokens[current - 1].lexeme);
-            } else if (peek().type == TOK_IDENT || peek().type == TOK_VAR_REF) {
-                advance();
-                cond->is_variable = 1;
-                strncpy(cond->var_name, tokens[current - 1].lexeme, 63);
-                cond->var_name[63] = '\0';
-                cond->value = 0.0;
-            } else {
-                error_at(peek().line, "Expected number or variable after condition operator");
-                free(cond);
-                return node;
-            }
-
-            node->filter = cond;
-            node->has_filter = 1;
-        } else if (match(TOK_TRN)) {
-            int trn_line = tokens[current - 1].line;
-            if (!match(TOK_OP)) {
-                error_at(peek().line, "Expected operator after 'trn'");
-                return node;
-            }
-
-            Transform* trn = malloc(sizeof(Transform));
-            strncpy(trn->op_lexeme, tokens[current - 1].lexeme, 3);
-            trn->op_lexeme[3] = '\0';
-            trn->op = get_op_type(trn->op_lexeme);
-            trn->line = trn_line;
-            trn->expr = parse_coalesce();
-
-            if (!trn->expr) {
-                error_at(peek().line, "Expected expression after transform operator");
-                free(trn);
-                return node;
-            }
-
-            Transform** tmp = realloc(node->transforms,
-                                       (node->transform_count + 1) * sizeof(Transform*));
-            if (!tmp) {
-                int err_line = trn->line;
-                free(trn);
-                error_at(err_line, "Out of memory allocating transform");
-                return node;
-            }
-            node->transforms = tmp;
-            node->transforms[node->transform_count++] = trn;
-            node->has_transform = 1;
-        } else if (match(TOK_SUM)) {
-            node->has_sum = 1;
-        } else {
-            error_at(peek().line, "Expected 'whn', 'trn', or 'sum' after '|'");
-            return node;
-        }
-    }
-
-    return node;
-}
-
-static FnDefNode* parse_fn_def() {
-    FnDefNode* node = malloc(sizeof(FnDefNode));
-    node->type = NODE_FN_DEF;
-    node->param_count = 0;
-    node->body = NULL;
-
-    if (!match(TOK_FN)) {
-        error_at(peek().line, "Expected 'fn'");
-        return node;
-    }
-    node->line = tokens[current - 1].line;
-
-    if (!match(TOK_IDENT)) {
-        error_at(peek().line, "Expected function name after 'fn'");
-        return node;
-    }
-    strncpy(node->name, tokens[current - 1].lexeme, 63);
-    node->name[63] = '\0';
-
-    /* Collect parameter names — all IDENT tokens on the same line as 'fn'. */
-    while (peek().type == TOK_IDENT && node->param_count < MAX_PARAMS) {
-        advance();
-        strncpy(node->params[node->param_count], tokens[current - 1].lexeme, 63);
-        node->params[node->param_count][63] = '\0';
-        node->param_count++;
-    }
-
-    /* Expect the newline that separates parameters from the body. */
-    if (!match(TOK_NEWLINE)) {
-        error_at(peek().line, "Expected newline after parameter list in 'fn'");
-        return node;
-    }
-    /* Skip any additional blank lines before the body. */
-    while (match(TOK_NEWLINE)) {}
-
-    /* Body is a single arithmetic expression. */
-    node->body = parse_coalesce();
-
-    /* Skip trailing newlines before 'end'. */
-    while (match(TOK_NEWLINE)) {}
-
-    if (!match(TOK_END)) {
-        error_at(peek().line, "Expected 'end' after function body");
-    }
-
-    return node;
-}
-
-static UseStmtNode* parse_use_stmt() {
-    UseStmtNode* node = malloc(sizeof(UseStmtNode));
-    node->type = NODE_USE;
-    node->line = peek().line;
-
-    if (!match(TOK_USE)) {
-        error_at(peek().line, "Expected 'use'");
-        return node;
-    }
-    node->line = tokens[current - 1].line;
-
-    if (!match(TOK_IDENT)) {
-        error_at(peek().line, "Expected module name after 'use'");
-        return node;
-    }
-    strncpy(node->module_name, tokens[current - 1].lexeme, 63);
-    node->module_name[63] = '\0';
-
-    return node;
-}
-
-static InptNode* parse_inpt_stmt() {
-    InptNode* node = malloc(sizeof(InptNode));
-    node->type = NODE_INPT;
-    node->has_prompt = 0;
-    node->prompt[0] = '\0';
-    node->var_name[0] = '\0';
-
-    if (!match(TOK_INPT)) {
-        error_at(peek().line, "Expected 'inpt'");
-        return node;
-    }
-    node->line = tokens[current - 1].line;
-
-    if (!match(TOK_IDENT)) {
-        error_at(peek().line, "Expected identifier after 'inpt'");
-        return node;
-    }
-    strncpy(node->var_name, tokens[current - 1].lexeme, 63);
-    node->var_name[63] = '\0';
-
-    if (peek().type == TOK_STRING) {
-        advance();
-        strncpy(node->prompt, tokens[current - 1].lexeme, 63);
-        node->prompt[63] = '\0';
-        node->has_prompt = 1;
-    }
-
     return node;
 }
 
 ASTNode* parse(Token* tok, int count) {
-    /* Reset all parser state so that consecutive calls (one per pipeline or
-       statement) do not inherit position or token-stream pointer from the
-       previous invocation.  This is what allows a single source file to
-       contain multiple lst…emt pipelines without interference. */
-    tokens = tok;
-    token_count = count;
-    current = 0;
+    global_tokens = tok; global_token_count = count; current_pos = 0;
+    ASTNode* root = calloc(1, sizeof(ASTNode)); root->stmt_type = STMT_BLOCK;
+    root->node.block = malloc(sizeof(BlockNode)); *root->node.block = parse_block();
+    return root;
+}
 
-    ASTNode* ast = malloc(sizeof(ASTNode));
-    ast->type = NODE_EMT;
-    ast->stmt_type = STMT_EMTPY;
-    ast->emt_label[0] = '\0';
-    ast->has_emt_label = 0;
-
-    if (token_count == 0 || tokens[0].type == TOK_EOF) {
-        return ast;
-    }
-
-    if (tokens[0].type == TOK_IDENT && token_count > 1 && tokens[1].type == TOK_ASSIGN) {
-        ast->stmt_type = STMT_ASSIGN;
-        ast->node.assign = parse_assign();
-    } else if (tokens[0].type == TOK_NUMBER || tokens[0].type == TOK_IDENT) {
-        /* Check for keyword misspellings at statement position. */
-        if (tokens[0].type == TOK_IDENT) {
-            const char* suggestion = suggest_keyword(tokens[0].lexeme);
-            if (suggestion) {
-                char hint_msg[128];
-                snprintf(hint_msg, sizeof(hint_msg), "Did you mean '%s'?", suggestion);
-                set_error_hint(hint_msg);
-                set_error_col(tokens[0].col);
-                error_at(tokens[0].line, "Unknown keyword '%s'", tokens[0].lexeme);
-            }
-        }
-        ast->stmt_type = STMT_ARITH;
-        ast->node.arith = (ArithNode*)parse_coalesce();
-
-        if (match(TOK_ARROW)) {
-            if (!match(TOK_EMT)) {
-                error_at(peek().line, "Expected 'emt' after '->'");
-            }
-        }
-        /* Optional label after -> emt (U1) */
-        if (peek().type == TOK_STRING) {
-            strncpy(ast->emt_label, peek().lexeme, 63);
-            ast->emt_label[63] = '\0';
-            ast->has_emt_label = 1;
-            advance();
-        }
-    } else if (tokens[0].type == TOK_LST) {
-        int lst_line = tokens[current].line;
-        advance();
-        ast->stmt_type = STMT_PIPELINE;
-        ast->node.pipeline = parse_pipeline(lst_line);
-
-        if (!match(TOK_EMT)) {
-            if (match(TOK_ARROW)) {
-                if (!match(TOK_EMT)) {
-                    error_at(peek().line, "Expected 'emt'");
-                }
-            }
-        }
-        /* Optional label after emt (U1) */
-        if (peek().type == TOK_STRING) {
-            strncpy(ast->node.pipeline->emt_label, peek().lexeme, 63);
-            ast->node.pipeline->emt_label[63] = '\0';
-            ast->node.pipeline->has_emt_label = 1;
-            advance();
-        }
-        /* Optional sep "string" after emt [label] (U10) */
-        if (peek().type == TOK_IDENT && strcmp(peek().lexeme, "sep") == 0) {
-            advance(); /* consume "sep" */
-            if (peek().type == TOK_STRING) {
-                strncpy(ast->node.pipeline->emt_sep, peek().lexeme, 63);
-                ast->node.pipeline->emt_sep[63] = '\0';
-                ast->node.pipeline->has_emt_sep = 1;
-                advance();
-            } else {
-                error_at(peek().line, "Expected string after 'sep'");
-            }
-        }
-    } else if (tokens[0].type == TOK_EMT) {
-        /* Standalone emt ["label"] expr  (U1) */
-        advance(); /* consume emt */
-        if (peek().type == TOK_STRING) {
-            strncpy(ast->emt_label, peek().lexeme, 63);
-            ast->emt_label[63] = '\0';
-            ast->has_emt_label = 1;
-            advance();
-        }
-        ast->stmt_type = STMT_ARITH;
-        ast->node.arith = (ArithNode*)parse_coalesce();
-    } else if (tokens[0].type == TOK_FN) {
-        ast->stmt_type = STMT_FN_DEF;
-        ast->node.fn_def = parse_fn_def();
-    } else if (tokens[0].type == TOK_USE) {
-        ast->stmt_type = STMT_USE;
-        ast->node.use_stmt = parse_use_stmt();
-    } else if (tokens[0].type == TOK_INPT) {
-        ast->stmt_type = STMT_INPT;
-        ast->node.inpt = parse_inpt_stmt();
-    } else {
-        error_at(tokens[0].line, "Expected lst, identifier, or number");
-    }
-
-    return ast;
+void free_expr(Expr* expr) {
+    if (!expr) return;
+    if (expr->type == EXPR_BINARY || expr->type == EXPR_COALESCE) { free_expr(expr->left); free_expr(expr->right); }
+    else if (expr->type == EXPR_CALL || expr->type == EXPR_LIST) { for (int i = 0; i < expr->arg_count; i++) free_expr(expr->args[i]); }
+    free(expr);
 }
 
 void free_ast(ASTNode* ast) {
     if (!ast) return;
-    
-    if (ast->stmt_type == STMT_ARITH) {
-        free_expr((Expr*)ast->node.arith);
-    } else if (ast->stmt_type == STMT_ASSIGN) {
-        free(ast->node.assign);
-    } else if (ast->stmt_type == STMT_PIPELINE) {
-        if (ast->node.pipeline->list) free(ast->node.pipeline->list);
-        if (ast->node.pipeline->filter) free(ast->node.pipeline->filter);
-        if (ast->node.pipeline->transforms) {
+    switch (ast->stmt_type) {
+        case STMT_BLOCK:
+            for (int i = 0; i < ast->node.block->count; i++) free_ast(ast->node.block->nodes[i]);
+            free(ast->node.block->nodes); free(ast->node.block); break;
+        case STMT_ARITH: free_expr((Expr*)ast->node.arith); break;
+        case STMT_ASSIGN: if (ast->node.assign->expr) free_expr(ast->node.assign->expr); free(ast->node.assign); break;
+        case STMT_PIPELINE:
+            free(ast->node.pipeline->list); if (ast->node.pipeline->filter) free(ast->node.pipeline->filter);
             for (int i = 0; i < ast->node.pipeline->transform_count; i++) {
-                free_expr(ast->node.pipeline->transforms[i]->expr);
-                free(ast->node.pipeline->transforms[i]);
+                free_expr(ast->node.pipeline->transforms[i]->expr); free(ast->node.pipeline->transforms[i]);
             }
-            free(ast->node.pipeline->transforms);
-        }
-        free(ast->node.pipeline);
-    } else if (ast->stmt_type == STMT_FN_DEF) {
-        /* Body ownership is transferred to FuncTable (cloned there);
-           free the original body and the node itself. */
-        free_expr(ast->node.fn_def->body);
-        free(ast->node.fn_def);
-    } else if (ast->stmt_type == STMT_USE) {
-        free(ast->node.use_stmt);
-    } else if (ast->stmt_type == STMT_INPT) {
-        free(ast->node.inpt);
+            free(ast->node.pipeline->transforms); free(ast->node.pipeline); break;
+        case STMT_FN_DEF: free_expr(ast->node.fn_def->body); free(ast->node.fn_def); break;
+        case STMT_USE: free(ast->node.use_stmt); break;
+        case STMT_INPT: free(ast->node.inpt); break;
+        case STMT_IF:
+            free_expr(ast->node.if_node->condition);
+            for (int i = 0; i < ast->node.if_node->then_block.count; i++) free_ast(ast->node.if_node->then_block.nodes[i]);
+            free(ast->node.if_node->then_block.nodes);
+            for (int i = 0; i < ast->node.if_node->elif_count; i++) {
+                free_expr(ast->node.if_node->elif_branches[i].condition);
+                for (int j = 0; j < ast->node.if_node->elif_branches[i].body.count; j++) free_ast(ast->node.if_node->elif_branches[i].body.nodes[j]);
+                free(ast->node.if_node->elif_branches[i].body.nodes);
+            }
+            free(ast->node.if_node->elif_branches);
+            for (int i = 0; i < ast->node.if_node->else_block.count; i++) free_ast(ast->node.if_node->else_block.nodes[i]);
+            free(ast->node.if_node->else_block.nodes); free(ast->node.if_node); break;
+        case STMT_FOR:
+            free_expr(ast->node.for_node->start); free_expr(ast->node.for_node->end);
+            for (int i = 0; i < ast->node.for_node->body.count; i++) free_ast(ast->node.for_node->body.nodes[i]);
+            free(ast->node.for_node->body.nodes); free(ast->node.for_node); break;
+        case STMT_WHL:
+            free_expr(ast->node.whl_node->condition);
+            for (int i = 0; i < ast->node.whl_node->body.count; i++) free_ast(ast->node.whl_node->body.nodes[i]);
+            free(ast->node.whl_node->body.nodes); free(ast->node.whl_node); break;
+        case STMT_EACH:
+            for (int i = 0; i < ast->node.each_node->body.count; i++) free_ast(ast->node.each_node->body.nodes[i]);
+            free(ast->node.each_node->body.nodes); free(ast->node.each_node); break;
+        case STMT_RPT:
+            free_expr(ast->node.rpt_node->count);
+            for (int i = 0; i < ast->node.rpt_node->body.count; i++) free_ast(ast->node.rpt_node->body.nodes[i]);
+            free(ast->node.rpt_node->body.nodes); free(ast->node.rpt_node); break;
+        case STMT_RET: free_expr(ast->node.ret_node->value); free(ast->node.ret_node); break;
+        case STMT_LET: free_expr(ast->node.let_node->value); free(ast->node.let_node); break;
+        default: break;
     }
-    
     free(ast);
 }

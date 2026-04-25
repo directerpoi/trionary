@@ -2,11 +2,31 @@
 #include <math.h>
 #include <string.h>
 
-static double builtin_floor(double *args, int n) { (void)n; return floor(args[0]); }
-static double builtin_ceil (double *args, int n) { (void)n; return ceil(args[0]);  }
-static double builtin_abs  (double *args, int n) { (void)n; return fabs(args[0]);  }
-static double builtin_sqrt (double *args, int n) { (void)n; return sqrt(args[0]);  }
-static double builtin_pow  (double *args, int n) { (void)n; return pow(args[0], args[1]); }
+static Value builtin_floor(Value *args, int n) { 
+    (void)n; 
+    Value v; v.type = VAL_NUMBER; v.as.number = floor(args[0].as.number); v.is_immutable = 0;
+    return v; 
+}
+static Value builtin_ceil (Value *args, int n) { 
+    (void)n; 
+    Value v; v.type = VAL_NUMBER; v.as.number = ceil(args[0].as.number); v.is_immutable = 0;
+    return v; 
+}
+static Value builtin_abs  (Value *args, int n) { 
+    (void)n; 
+    Value v; v.type = VAL_NUMBER; v.as.number = fabs(args[0].as.number); v.is_immutable = 0;
+    return v; 
+}
+static Value builtin_sqrt (Value *args, int n) { 
+    (void)n; 
+    Value v; v.type = VAL_NUMBER; v.as.number = sqrt(args[0].as.number); v.is_immutable = 0;
+    return v; 
+}
+static Value builtin_pow  (Value *args, int n) { 
+    (void)n; 
+    Value v; v.type = VAL_NUMBER; v.as.number = pow(args[0].as.number, args[1].as.number); v.is_immutable = 0;
+    return v; 
+}
 
 void register_math_module(FuncTable *ft) {
     static const struct {
@@ -22,7 +42,6 @@ void register_math_module(FuncTable *ft) {
     };
     int nmods = (int)(sizeof(math_funcs) / sizeof(math_funcs[0]));
     for (int i = 0; i < nmods; i++) {
-        /* Skip if already registered (idempotent re-use). */
         int already = 0;
         for (int j = 0; j < ft->count; j++) {
             if (strcmp(ft->funcs[j].name, math_funcs[i].name) == 0) {

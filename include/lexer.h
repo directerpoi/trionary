@@ -6,6 +6,11 @@ typedef enum {
     TOK_FN,                 /* fn  */
     TOK_END,                /* end */
     TOK_USE,                /* use */
+    TOK_IF, TOK_ELS, TOK_ELIF,
+    TOK_FOR, TOK_WHL, TOK_EACH,
+    TOK_BRK, TOK_NXT, TOK_RET,
+    TOK_NOT, TOK_AND, TOK_OR,
+    TOK_IN, TOK_LET, TOK_RPT,
     TOK_PIPE,               /* |  */
     TOK_ARROW,              /* -> */
     TOK_LBRACK, TOK_RBRACK,

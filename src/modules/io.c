@@ -3,20 +3,30 @@
 #include <stdio.h>
 #include <string.h>
 
-/* print(x): emits x to stdout and returns x */
-static double builtin_print(double *args, int n) {
+static Value builtin_print(Value *args, int n) {
     (void)n;
-    emit_value(args[0]);
+    if (args[0].type == VAL_NUMBER) {
+        emit_value(args[0].as.number);
+    } else if (args[0].type == VAL_LIST) {
+        printf("[");
+        for (int i = 0; i < args[0].as.list.length; i++) {
+            emit_value_no_newline(args[0].as.list.elements[i]);
+            if (i < args[0].as.list.length - 1) printf(", ");
+        }
+        printf("]\n");
+    }
     return args[0];
 }
 
-/* read_line(default): reads a double from stdin; returns default on EOF/error */
-static double builtin_read_line(double *args, int n) {
+static Value builtin_read_line(Value *args, int n) {
     (void)n;
     char buf[64];
     if (!fgets(buf, sizeof(buf), stdin)) return args[0];
     double val;
-    if (sscanf(buf, "%lf", &val) == 1) return val;
+    if (sscanf(buf, "%lf", &val) == 1) {
+        Value v; v.type = VAL_NUMBER; v.as.number = val; v.is_immutable = 0;
+        return v;
+    }
     return args[0];
 }
 
@@ -31,7 +41,6 @@ void register_io_module(FuncTable *ft) {
     };
     int nmods = (int)(sizeof(io_funcs) / sizeof(io_funcs[0]));
     for (int i = 0; i < nmods; i++) {
-        /* Skip if already registered (idempotent re-use). */
         int already = 0;
         for (int j = 0; j < ft->count; j++) {
             if (strcmp(ft->funcs[j].name, io_funcs[i].name) == 0) {
