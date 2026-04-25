@@ -17,7 +17,9 @@ typedef enum {
     VAL_MAP,
     VAL_SET,
     VAL_TUPLE,
-    VAL_PAIR
+    VAL_PAIR,
+    VAL_FN,
+    VAL_ERROR
 } ValueType;
 
 typedef struct Value Value;
@@ -42,6 +44,12 @@ struct Value {
             Value* key;
             Value* value;
         } pair;
+        struct {
+            char   params[MAX_PARAMS][64];
+            int    param_count;
+            struct Expr* body;
+            struct Scope* closure;
+        } fn;
     } as;
     int is_immutable;
 };
@@ -103,7 +111,9 @@ typedef enum {
     STATUS_NORMAL,
     STATUS_BREAK,
     STATUS_CONTINUE,
-    STATUS_RETURN
+    STATUS_RETURN,
+    STATUS_ERROR,
+    STATUS_EXIT
 } ControlStatus;
 
 typedef struct {
@@ -115,6 +125,7 @@ void register_math_module(FuncTable *ft);
 void register_io_module(FuncTable *ft);
 void register_list_module(FuncTable *ft);
 void register_string_module(FuncTable *ft);
+void register_core_builtins(FuncTable *ft);
 
 ExecResult execute(ASTNode* ast, SymTable* sym, FuncTable* ft);
 

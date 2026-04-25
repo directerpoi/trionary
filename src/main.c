@@ -232,6 +232,7 @@ int main(int argc, char* argv[]) {
 
     SymTable* sym = create_symtable();
     FuncTable* ft = create_functable();
+    register_core_builtins(ft);
 
     int script_argc = argc - 3;
     Value argc_val; argc_val.type = VAL_INT; argc_val.as.integer = script_argc; argc_val.is_immutable = 0;

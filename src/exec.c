@@ -8,6 +8,12 @@
 #include <string.h>
 #include <errno.h>
 #include <math.h>
+#include <time.h>
+
+static void free_value(Value v);
+Value clone_value(Value v);
+static struct Scope* clone_scope(struct Scope* s);
+static void free_scope(struct Scope* s);
 
 double val_to_double(Value v) {
     if (v.type == VAL_INT) return (double)v.as.integer;
@@ -60,6 +66,31 @@ static ScopeEntry* scope_reserve(Scope* scope, const char* name) {
     return NULL;
 }
 
+static Scope* clone_scope(Scope* s) {
+    if (!s) return NULL;
+    Scope* copy = calloc(1, sizeof(Scope));
+    copy->parent = clone_scope(s->parent);
+    for (int i = 0; i < SCOPE_CAPACITY; i++) {
+        if (s->slots[i].occupied) {
+            strncpy(copy->slots[i].name, s->slots[i].name, 63);
+            copy->slots[i].value = clone_value(s->slots[i].value);
+            copy->slots[i].occupied = 1;
+        }
+    }
+    return copy;
+}
+
+static void free_scope(Scope* s) {
+    if (!s) return;
+    free_scope(s->parent);
+    for (int i = 0; i < SCOPE_CAPACITY; i++) {
+        if (s->slots[i].occupied) {
+            free_value(s->slots[i].value);
+        }
+    }
+    free(s);
+}
+
 SymTable* create_symtable(void) {
     SymTable* t = malloc(sizeof(SymTable));
     t->current = calloc(1, sizeof(Scope));
@@ -76,6 +107,7 @@ void scope_push(SymTable* t) {
 static void free_value(Value v) {
     switch (v.type) {
         case VAL_STRING:
+        case VAL_ERROR:
             free(v.as.string);
             break;
         case VAL_ARRAY:
@@ -98,6 +130,10 @@ static void free_value(Value v) {
             if (v.as.pair.key) { free_value(*v.as.pair.key); free(v.as.pair.key); }
             if (v.as.pair.value) { free_value(*v.as.pair.value); free(v.as.pair.value); }
             break;
+        case VAL_FN:
+            free_expr(v.as.fn.body);
+            free_scope(v.as.fn.closure);
+            break;
         default:
             break;
     }
@@ -107,6 +143,7 @@ Value clone_value(Value v) {
     Value res = v;
     switch (v.type) {
         case VAL_STRING:
+        case VAL_ERROR:
             res.as.string = strdup(v.as.string);
             break;
         case VAL_ARRAY:
@@ -130,6 +167,10 @@ Value clone_value(Value v) {
             res.as.pair.value = malloc(sizeof(Value));
             *res.as.pair.key = clone_value(*v.as.pair.key);
             *res.as.pair.value = clone_value(*v.as.pair.value);
+            break;
+        case VAL_FN:
+            res.as.fn.body = clone_expr(v.as.fn.body);
+            res.as.fn.closure = clone_scope(v.as.fn.closure);
             break;
         default:
             break;
@@ -218,20 +259,6 @@ Value sym_get(SymTable* t, const char* name) {
     }
     Value v; v.type = VAL_NIL; v.is_immutable = 0;
     return v;
-}
-
-static Expr* clone_expr(const Expr* src) {
-    if (!src) return NULL;
-    Expr* dst = malloc(sizeof(Expr));
-    *dst = *src;
-    if (src->type == EXPR_BINARY || src->type == EXPR_COALESCE || src->type == EXPR_PAIR) {
-        dst->left = clone_expr(src->left);
-        dst->right = clone_expr(src->right);
-    } else if (src->type == EXPR_CALL || src->type == EXPR_LIST || src->type == EXPR_MAP || src->type == EXPR_SET || src->type == EXPR_TUPLE) {
-        for (int i = 0; i < src->arg_count; i++)
-            dst->args[i] = clone_expr(src->args[i]);
-    }
-    return dst;
 }
 
 FuncTable* create_functable(void) {
@@ -366,6 +393,31 @@ static Value eval_expr(Expr* expr, SymTable* sym, FuncTable* ft) {
             *res.as.pair.key = eval_expr(expr->left, sym, ft);
             *res.as.pair.value = eval_expr(expr->right, sym, ft);
             return res;
+        case EXPR_LMB:
+            res.type = VAL_FN;
+            res.as.fn.param_count = expr->arg_count;
+            for (int i = 0; i < expr->arg_count; i++) {
+                strncpy(res.as.fn.params[i], expr->args[i]->var_name, 63);
+            }
+            res.as.fn.body = clone_expr(expr->left);
+            res.as.fn.closure = clone_scope(sym->current);
+            return res;
+        case EXPR_ERR: {
+            Value msg = eval_expr(expr->left, sym, ft);
+            res.type = VAL_ERROR;
+            res.as.string = value_to_string(msg);
+            free_value(msg);
+            return res;
+        }
+        case EXPR_TIM: {
+            struct timespec start, end;
+            clock_gettime(CLOCK_MONOTONIC, &start);
+            res = eval_expr(expr->left, sym, ft);
+            clock_gettime(CLOCK_MONOTONIC, &end);
+            double elapsed = (double)(end.tv_sec - start.tv_sec) + (double)(end.tv_nsec - start.tv_nsec) / 1e9;
+            fprintf(stderr, "Time: %.6fs\n", elapsed);
+            return res;
+        }
         case EXPR_IO: {
             if (expr->op == (OpType)TOK_ASK) {
                 if (expr->arg_count > 0) {
@@ -531,6 +583,22 @@ static Value eval_expr(Expr* expr, SymTable* sym, FuncTable* ft) {
         }
         case EXPR_CALL: {
             FuncDef* fd = NULL;
+            Value fval = sym_get(sym, expr->var_name);
+            if (fval.type == VAL_FN) {
+                Value args[MAX_PARAMS];
+                for (int i = 0; i < expr->arg_count; i++) args[i] = eval_expr(expr->args[i], sym, ft);
+                Scope* old_current = sym->current;
+                sym->current = clone_scope(fval.as.fn.closure);
+                scope_push(sym);
+                for (int i = 0; i < fval.as.fn.param_count && i < expr->arg_count; i++) 
+                    sym_set(sym, fval.as.fn.params[i], args[i]);
+                Value val = eval_expr(fval.as.fn.body, sym, ft);
+                scope_pop(sym);
+                free_scope(sym->current);
+                sym->current = old_current;
+                for (int i = 0; i < expr->arg_count; i++) free_value(args[i]);
+                return val;
+            }
             for (int i = 0; i < ft->count; i++) {
                 if (strcmp(ft->funcs[i].name, expr->var_name) == 0) {
                     fd = &ft->funcs[i]; break;
@@ -553,11 +621,12 @@ static Value eval_expr(Expr* expr, SymTable* sym, FuncTable* ft) {
             for (int i = 0; i < expr->arg_count; i++) free_value(args[i]);
             return val;
         }
-        case EXPR_COALESCE: {
+        case EXPR_COALESCE:
+        case EXPR_DFLT: {
             if (expr->left->type == EXPR_VARIABLE && !sym_exists(sym, expr->left->var_name))
                 return eval_expr(expr->right, sym, ft);
             Value v = eval_expr(expr->left, sym, ft);
-            if (v.type == VAL_NIL) {
+            if (v.type == VAL_NIL || (expr->type == EXPR_DFLT && v.type == VAL_ERROR)) {
                 free_value(v);
                 return eval_expr(expr->right, sym, ft);
             }
@@ -565,6 +634,43 @@ static Value eval_expr(Expr* expr, SymTable* sym, FuncTable* ft) {
         }
     }
     return res;
+}
+
+static Value builtin_ok(Value *args, int n) {
+    Value res; res.type = VAL_BOOL; res.is_immutable = 0;
+    if (n < 1) res.as.boolean = 0;
+    else res.as.boolean = (args[0].type != VAL_ERROR);
+    return res;
+}
+
+static Value builtin_typ(Value *args, int n) {
+    Value res; res.type = VAL_STRING; res.is_immutable = 0;
+    if (n < 1) { res.as.string = strdup("nil"); return res; }
+    switch (args[0].type) {
+        case VAL_NIL: res.as.string = strdup("nil"); break;
+        case VAL_BOOL: res.as.string = strdup("bool"); break;
+        case VAL_INT: res.as.string = strdup("int"); break;
+        case VAL_FLOAT: res.as.string = strdup("flt"); break;
+        case VAL_STRING: res.as.string = strdup("str"); break;
+        case VAL_ARRAY: res.as.string = strdup("arr"); break;
+        case VAL_MAP: res.as.string = strdup("map"); break;
+        case VAL_SET: res.as.string = strdup("set"); break;
+        case VAL_TUPLE: res.as.string = strdup("tpl"); break;
+        case VAL_PAIR: res.as.string = strdup("pair"); break;
+        case VAL_FN: res.as.string = strdup("fn"); break;
+        case VAL_ERROR: res.as.string = strdup("err"); break;
+        default: res.as.string = strdup("unknown"); break;
+    }
+    return res;
+}
+
+void register_core_builtins(FuncTable *ft) {
+    if (ft->count >= MAX_FUNCS) return;
+    FuncDef *fd = &ft->funcs[ft->count++];
+    strncpy(fd->name, "ok", 63); fd->param_count = 1; fd->is_builtin = 1; fd->builtin_fn = builtin_ok;
+    if (ft->count >= MAX_FUNCS) return;
+    fd = &ft->funcs[ft->count++];
+    strncpy(fd->name, "typ", 63); fd->param_count = 1; fd->is_builtin = 1; fd->builtin_fn = builtin_typ;
 }
 
 static int apply_condition(Value val, Condition* cond, SymTable* sym) {
@@ -703,6 +809,101 @@ ExecResult execute(ASTNode* ast, SymTable* sym, FuncTable* ft) {
     if (!ast) return res;
     switch (ast->stmt_type) {
         case STMT_BLOCK: return exec_block(ast->node.block, sym, ft);
+        case STMT_EXT: {
+            int code = 0;
+            if (ast->node.generic->expr) {
+                Value v = eval_expr(ast->node.generic->expr, sym, ft);
+                code = (int)val_to_double(v);
+                free_value(v);
+            }
+            exit(code);
+        }
+        case STMT_STP: exit(1);
+        case STMT_THR: {
+            Value v = eval_expr(ast->node.generic->expr, sym, ft);
+            res.status = STATUS_ERROR;
+            res.value = v;
+            return res;
+        }
+        case STMT_TRY: {
+            res = exec_block(&ast->node.try_node->try_block, sym, ft);
+            if (res.status == STATUS_ERROR) {
+                if (ast->node.try_node->has_catch) {
+                    Value err_val = res.value;
+                    res.status = STATUS_NORMAL;
+                    res.value.type = VAL_NIL;
+                    scope_push(sym);
+                    if (ast->node.try_node->err_var[0]) {
+                        sym_set(sym, ast->node.try_node->err_var, err_val);
+                    }
+                    free_value(err_val);
+                    ExecResult catch_res = exec_block(&ast->node.try_node->catch_block, sym, ft);
+                    scope_pop(sym);
+                    return catch_res;
+                }
+            }
+            return res;
+        }
+        case STMT_ASRT: {
+            Value v = eval_expr(ast->node.generic->expr, sym, ft);
+            if (!is_truthy(v)) {
+                error_at(ast->node.generic->line, "Assertion failed");
+            }
+            free_value(v);
+            break;
+        }
+        case STMT_DBG: {
+            Value v = eval_expr(ast->node.generic->expr, sym, ft);
+            char* s = value_to_string(v);
+            fprintf(stderr, "DEBUG: %s\n", s);
+            free(s); free_value(v);
+            break;
+        }
+        case STMT_LOG: {
+            Value v = eval_expr(ast->node.generic->expr, sym, ft);
+            char* s = value_to_string(v);
+            fprintf(stderr, "LOG: %s\n", s);
+            free(s); free_value(v);
+            break;
+        }
+        case STMT_TRC: {
+            Value v = eval_expr(ast->node.generic->expr, sym, ft);
+            char* s = value_to_string(v);
+            fprintf(stderr, "TRACE: %s\n", s);
+            free(s); free_value(v);
+            break;
+        }
+        case STMT_DOC: break;
+        case STMT_PKG: break;
+        case STMT_EXP: break;
+        case STMT_IMP: {
+            if (strcmp(ast->node.imp_node->module_name, "math") == 0) register_math_module(ft);
+            else if (strcmp(ast->node.imp_node->module_name, "io") == 0) register_io_module(ft);
+            break;
+        }
+        case STMT_TST: {
+            Value v = eval_expr(ast->node.tst_node->expr, sym, ft);
+            if (!is_truthy(v)) {
+                fprintf(stderr, "TEST FAILED: %s (line %d)\n", ast->node.tst_node->label, ast->node.tst_node->line);
+            } else {
+                fprintf(stderr, "TEST PASSED: %s\n", ast->node.tst_node->label);
+            }
+            free_value(v);
+            break;
+        }
+        case STMT_CHK: {
+            Value v = eval_expr(ast->node.chk_node->expr, sym, ft);
+            const char* expected = ast->node.chk_node->type_name;
+            int ok = 0;
+            if (strcmp(expected, "int") == 0) ok = (v.type == VAL_INT);
+            else if (strcmp(expected, "flt") == 0) ok = (v.type == VAL_FLOAT);
+            else if (strcmp(expected, "str") == 0) ok = (v.type == VAL_STRING);
+            else if (strcmp(expected, "bool") == 0) ok = (v.type == VAL_BOOL);
+            else if (strcmp(expected, "arr") == 0) ok = (v.type == VAL_ARRAY);
+            if (!ok) error_at(ast->node.chk_node->line, "Type check failed");
+            free_value(v);
+            break;
+        }
         case STMT_ASSIGN: {
             Value v;
             if (ast->node.assign->rhs_type == ASSIGN_INPUT) {

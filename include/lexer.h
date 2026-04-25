@@ -18,7 +18,7 @@ typedef enum {
     TOK_LBRACK, TOK_RBRACK,
     TOK_LBRACE, TOK_RBRACE,
     TOK_LPAREN, TOK_RPAREN,
-    TOK_COLON, TOK_COMMA,
+    TOK_COLON, TOK_COMMA, TOK_DOT,
     TOK_NUMBER,             /* integer or float literal */
     TOK_IDENT,              /* variable name */
     TOK_ASSIGN,             /* = */
@@ -32,6 +32,27 @@ typedef enum {
     TOK_SAY,                /* say — print with newline */
     TOK_PRT,                /* prt — print without newline */
     TOK_ASK,                /* ask — prompt and read input */
+    TOK_EXT,                /* ext — exit program */
+    TOK_STP,                /* stp — stop program */
+    TOK_LMB,                /* lmb — lambda */
+    TOK_IMP,                /* imp — import */
+    TOK_AS,                 /* as — alias */
+    TOK_FRM,                /* frm — from */
+    TOK_EXP,                /* exp — export */
+    TOK_PKG,                /* pkg — package */
+    TOK_TRY,                /* try */
+    TOK_CTCH,               /* ctch — catch */
+    TOK_THR,                /* thr — throw */
+    TOK_ERR,                /* err — error value/type */
+    TOK_ASRT,               /* asrt — assert */
+    TOK_DFLT,               /* dflt — default */
+    TOK_DBG,                /* dbg — debug */
+    TOK_LOG,                /* log */
+    TOK_TST,                /* tst — test */
+    TOK_TRC,                /* trc — trace */
+    TOK_DOC,                /* doc — documentation */
+    TOK_CHK,                /* chk — type check */
+    TOK_TIM,                /* tim — time */
     TOK_FRD,                /* frd — file read */
     TOK_FWR,                /* fwr — file write */
     TOK_FAP,                /* fap — file append */

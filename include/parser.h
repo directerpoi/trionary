@@ -24,7 +24,21 @@ typedef enum {
     NODE_RET,
     NODE_LET,
     NODE_DECL,
-    NODE_IO
+    NODE_IO,
+    NODE_EXT,
+    NODE_STP,
+    NODE_IMP,
+    NODE_EXP,
+    NODE_PKG,
+    NODE_TRY,
+    NODE_THR,
+    NODE_ASRT,
+    NODE_DBG,
+    NODE_LOG,
+    NODE_TST,
+    NODE_TRC,
+    NODE_DOC,
+    NODE_CHK
 } NodeType;
 
 typedef enum {
@@ -48,7 +62,11 @@ typedef enum {
     EXPR_SET,
     EXPR_TUPLE,
     EXPR_PAIR,
-    EXPR_IO
+    EXPR_IO,
+    EXPR_LMB,
+    EXPR_ERR,
+    EXPR_TIM,
+    EXPR_DFLT
 } ExprType;
 
 typedef struct Expr {
@@ -169,12 +187,57 @@ typedef struct {
     int       line;
 } IONode;
 
+typedef struct {
+    NodeType type;
+    Expr*    expr;
+    int      line;
+} GenericNode;
+
+typedef struct {
+    NodeType type;
+    char     name[64];
+    int      line;
+} NameNode;
+
 typedef struct ASTNode ASTNode;
 
 typedef struct {
     ASTNode** nodes;
     int       count;
 } BlockNode;
+
+typedef struct {
+    NodeType  type;
+    BlockNode try_block;
+    char      err_var[64];
+    BlockNode catch_block;
+    int       has_catch;
+    int       line;
+} TryNode;
+
+typedef struct {
+    NodeType type;
+    char     module_name[64];
+    char     alias[64];
+    char     symbols[MAX_PARAMS][64];
+    int      symbol_count;
+    int      is_from;
+    int      line;
+} ImpNode;
+
+typedef struct {
+    NodeType type;
+    char     label[256];
+    Expr*    expr;
+    int      line;
+} TstNode;
+
+typedef struct {
+    NodeType type;
+    Expr*    expr;
+    char     type_name[64];
+    int      line;
+} ChkNode;
 
 typedef struct {
     Expr*     condition;
@@ -241,12 +304,20 @@ typedef struct ASTNode {
         LetNode*      let_node;
         DeclNode*     decl_node;
         IONode*       io_node;
+        GenericNode*  generic;
+        NameNode*     name_node;
+        TryNode*      try_node;
+        ImpNode*      imp_node;
+        TstNode*      tst_node;
+        ChkNode*      chk_node;
     } node;
     enum { 
         STMT_EMPTY, STMT_ARITH, STMT_ASSIGN, STMT_PIPELINE, STMT_FN_DEF, 
         STMT_USE, STMT_INPT, STMT_IF, STMT_FOR, STMT_WHL, STMT_EACH, 
         STMT_RPT, STMT_BRK, STMT_NXT, STMT_RET, STMT_LET, STMT_BLOCK,
-        STMT_DECL, STMT_IO
+        STMT_DECL, STMT_IO, STMT_EXT, STMT_STP, STMT_IMP, STMT_EXP,
+        STMT_PKG, STMT_TRY, STMT_THR, STMT_ASRT, STMT_DBG, STMT_LOG,
+        STMT_TST, STMT_TRC, STMT_DOC, STMT_CHK
     } stmt_type;
     /* Optional emt label prefix — set for 'emt "label" expr' and 'expr -> emt "label"' (U1) */
     char emt_label[64];
@@ -257,5 +328,6 @@ ASTNode* parse(Token* tokens, int token_count);
 ASTNode* parse_statement(void);
 void free_ast(ASTNode* ast);
 void free_expr(Expr* expr);
+Expr* clone_expr(Expr* expr);
 
 #endif
