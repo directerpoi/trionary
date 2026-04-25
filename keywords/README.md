@@ -40,13 +40,13 @@
 | [B_data_types.md](B_data_types.md) | Data Types | 12 |
 | [C_standard_functions.md](C_standard_functions.md) | Standard Functions | 38 |
 | [D_input_output.md](D_input_output.md) | Input / Output | 10 |
-| [E_control_flow.md](E_control_flow.md) | Control Flow | 8 |
+| [E_control_flow.md](E_control_flow.md) | Control Flow | 3 |
 | [F_functional.md](F_functional.md) | Functional Features | 8 |
 | [G_modules.md](G_modules.md) | Module System | 8 |
 | [H_error_handling.md](H_error_handling.md) | Error Handling | 8 |
 | [I_developer_experience.md](I_developer_experience.md) | Developer Experience | 8 |
 | [J_performance.md](J_performance.md) | Performance / Runtime | 8 |
-| **Total** | | **123** |
+| **Total** | | **118** |
 
 ---
 
@@ -66,7 +66,7 @@
 
 **Functions:**
 `mod`, `round`, `min`, `max`, `srt`, `srtd`, `rev`, `cnt`, `avg`,
-`push`, `pop`, `cat`, `len`, `sub`, `tostr`, `map`, `fil`, `typ`
+`push`, `pop`, `cat`, `len`, `sub`, `tostr`, `mpa`, `fil`, `typ`
 
 ---
 
@@ -82,7 +82,7 @@
 `map`, `int`, `flt`, `pair`, `nil`
 
 **Functions:**
-`sin`, `cos`, `tan`, `log`, `log10`, `exp`, `clmp`, `rnd`, `rndi`,
+`sin`, `cos`, `tan`, `ln`, `log10`, `epow`, `clmp`, `rnd`, `rndi`,
 `unq`, `zip`, `fnd`, `idx`, `slc`, `upr`, `lwr`, `trm`, `spl`, `has`,
 `rep`, `fmt`, `num`, `red`, `cmp`, `apl`, `tim`
 
@@ -92,11 +92,11 @@
 
 > Goal: production-ready features for larger programs; keep minimal users unaffected.
 
-**Keywords:** `elif`, `yld`, `lzy`, `csh`, `par`, `byt`, `opt`, `once`, `prt` (partial), `nsp`, `ext` (C binding), `bpt`, `spwn`
+**Keywords:** `elif`, `yld`, `lzy`, `csh`, `par`, `byt`, `opt`, `once`, `part` (partial apply), `nsp`, `bnd` (C binding), `bpt`, `spwn`
 
 **Types:** `tpl`, `set`
 
-**Functions:** `flat`, `fls` (file list), `csv`, `jrd`, `jrd`, `mem`
+**Functions:** `flat`, `lsf` (list files), `csv`, `jrd`, `mem`
 
 ---
 
@@ -105,7 +105,7 @@
 | Risk | Severity | Mitigation |
 |------|----------|-----------|
 | String type breaks numeric-only assumption | Medium | Introduce `str` as a distinct type; disallow mixed arithmetic |
-| `map` name clashes with the data type AND the functional operator | High | Rename data type to `dct` (dictionary) or use `map` keyword for both with context-sensitivity |
+| `map` name clashes with the data type AND the functional operator | High | **Resolved**: functional map renamed to `mpa`; `map` is reserved for the dictionary type |
 | `if`/`els` adds nesting depth; indentation becomes meaningful | Medium | Define nesting via `end` keyword (already in use for `fn`) |
 | `lmb` syntax complexity | Medium | Restrict lambda to single-expression body for v0.5 |
 | `par` / `spwn` introduce non-determinism | High | Defer to v1.0; require explicit `join` before reading results |

@@ -11,4 +11,4 @@
 | G05 | `pkg` | keyword | Declare the current file's package name | `pkg utils` | v0.5 |
 | G06 | `std` | keyword | Reference the standard library root | `use std.str` | v0.4 |
 | G07 | `nsp` | keyword | Define a named namespace block | `nsp geometry` | v1.0 |
-| G08 | `ext` | keyword | Bind an external C function | `ext fn c_memcpy` | v1.0 |
+| G08 | `bnd` | keyword | Bind an external C function | `bnd fn c_memcpy` | v1.0 |

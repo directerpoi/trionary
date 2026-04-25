@@ -10,9 +10,9 @@
 | C01 | `sin` | function | Sine of angle in radians | `sin 1.57` | v0.5 |
 | C02 | `cos` | function | Cosine of angle in radians | `cos 0` | v0.5 |
 | C03 | `tan` | function | Tangent of angle in radians | `tan 0.78` | v0.5 |
-| C04 | `log` | function | Natural logarithm | `log 2.71` | v0.5 |
+| C04 | `ln` | function | Natural logarithm | `ln 2.71` | v0.5 |
 | C05 | `log10` | function | Base-10 logarithm | `log10 100` | v0.5 |
-| C06 | `exp` | function | Euler's number raised to a power | `exp 1` | v0.5 |
+| C06 | `epow` | function | Euler's number raised to a power | `epow 1` | v0.5 |
 | C07 | `mod` | function / operator | Modulo (remainder) | `mod 10 3` | v0.4 |
 | C08 | `round` | function | Round to nearest integer | `round 3.7` | v0.4 |
 | C09 | `min` | function | Minimum of two or more values | `min 3 7 2` | v0.4 |
