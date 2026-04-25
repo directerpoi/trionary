@@ -11,6 +11,6 @@
 | D05 | `fwr` | keyword | Write (overwrite) content to a file | `fwr "out.txt" data` | v0.5 |
 | D06 | `fap` | keyword | Append content to a file | `fap "log.txt" line` | v0.5 |
 | D07 | `fex` | function | Check if a file path exists | `fex "data.txt"` | v0.5 |
-| D08 | `fls` | function | List files in a directory | `fls "."` | v1.0 |
+| D08 | `lsf` | function | List files in a directory | `lsf "."` | v1.0 |
 | D09 | `csv` | keyword | Parse a CSV file into a list of lists | `csv "data.csv"` | v1.0 |
 | D10 | `jrd` | keyword | Read and parse a JSON file | `jrd "config.json"` | v1.0 |
