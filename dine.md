@@ -831,3 +831,99 @@ IMPLEMENTATION_SUMMARY.md  ← full rewrite for v0.3.0
 src/main.c                 ← version string v0 → v0.3.0
 CHANGELOG.md               ← new
 ```
+
+---
+
+# v0.3.2 — Step 1 & Step 2: `tri version` and `tri help` Commands: Completion Notes
+
+## What Was Done
+
+Implemented **Step 1** (U3 — `tri version`) and **Step 2** (U2 — `tri help`) from `plan.md`.
+
+---
+
+## Step 1 — `tri version` (U3)
+
+Added a `version` subcommand that prints `Trionary v0.3.2` to stdout and exits with code 0.
+
+```
+$ ./tri version
+Trionary v0.3.2
+```
+
+The version string is stored in a `TRI_VERSION` macro at the top of `src/main.c` so it is easy to update in one place. The version label was bumped from `v0.3.1` to `v0.3.2`.
+
+---
+
+## Step 2 — `tri help` (U2)
+
+Added a `help` subcommand and support for the `--help` / `-h` flags. Any of the following invocations print the usage summary and exit with code 0:
+
+```
+$ ./tri help
+$ ./tri --help
+$ ./tri -h
+$ ./tri          # no arguments also shows help
+```
+
+The help output lists all available subcommands and a syntax reminder:
+
+```
+Usage: ./tri <command> [arguments]
+
+Commands:
+  run <file.tri> [arg0 arg1 ...]   Execute a Trionary source file
+  help                             Show this help message
+  version                          Print the interpreter version
+
+Examples:
+  ./tri run script.tri
+  ./tri run script.tri 10 20
+```
+
+The old `print_usage()` (which wrote to `stderr` and was only shown on error) has been replaced by `print_help()`, which writes to `stdout` for `help`/`--help`/`-h` invocations. Error paths still write their own messages to `stderr`.
+
+---
+
+## Changes Made
+
+### Modified Files
+
+| File | Change |
+|------|--------|
+| `src/main.c` | Removed `print_usage()`; added `TRI_VERSION` macro (`"Trionary v0.3.2"`); added `print_help()` function; added `version` and `help` (+ `--help` / `-h`) subcommand branches before the existing `run` logic; updated the missing-file-argument error for `run` to be more specific |
+
+---
+
+## Design Decisions
+
+- **`TRI_VERSION` macro.** Centralises the version string so every future bump is a single-line change.
+- **`help` exits 0.** Following Unix convention: `--help` and `help` always exit with code 0.
+- **No-argument invocation shows help.** When `tri` is run with no arguments it now shows the help message (exit 0) instead of returning an error. This is friendlier for new users.
+- **`print_help` writes to stdout.** Error messages still go to `stderr`; help goes to `stdout`. This matches standard CLI conventions and allows `tri help | less`.
+- **No changes outside `src/main.c`.** All other source files, headers, and the Makefile are untouched.
+
+---
+
+## Verification
+
+```
+$ make clean && make
+$ ./tri version              # → Trionary v0.3.2
+$ ./tri help                 # → usage summary (exit 0)
+$ ./tri --help               # → usage summary (exit 0)
+$ ./tri -h                   # → usage summary (exit 0)
+$ ./tri                      # → usage summary (exit 0)
+$ make test
+# Results: 19 passed, 0 failed
+```
+
+All 19 tests pass. No pre-existing test output changed.
+
+---
+
+## Files Touched (summary)
+
+```
+src/main.c   ← TRI_VERSION macro; print_help(); version + help subcommands; no-arg → help
+```
