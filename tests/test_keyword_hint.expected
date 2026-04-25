@@ -1,2 +1,4 @@
 Error: Unknown keyword 'list' at line 1
+  1 | list [1,2,3] -> emt
+      ^
   Hint: Did you mean 'lst'?

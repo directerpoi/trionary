@@ -5,6 +5,7 @@
 #include "lexer.h"
 #include "parser.h"
 #include "exec.h"
+#include "error.h"
 
 #define TRI_VERSION "Trionary v0.3.2"
 
@@ -58,6 +59,9 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    /* Make the raw source available to error_at() for context-line printing. */
+    set_error_source(source);
+
     int token_count = 0;
     Token* tokens = tokenise(source, &token_count);
     
@@ -67,7 +71,8 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    free(source);
+    /* source is freed after the execution loop so that error_at() can still
+       print context lines during parse and runtime errors. */
 
     SymTable* sym = create_symtable();
     FuncTable* ft = create_functable();
@@ -213,5 +218,6 @@ int main(int argc, char* argv[]) {
     free(tokens);
     free_symtable(sym);
     free_functable(ft);
+    free(source);
     return 0;
 }

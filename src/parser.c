@@ -47,6 +47,7 @@ static Expr* create_expr(ExprType type) {
     Expr* expr = malloc(sizeof(Expr));
     expr->type = type;
     expr->line = 0;
+    expr->col  = 0;
     return expr;
 }
 
@@ -57,10 +58,12 @@ static Expr* parse_primary() {
         expr = create_expr(EXPR_NUMBER);
         expr->num_val = atof(tokens[current - 1].lexeme);
         expr->line = tokens[current - 1].line;
+        expr->col  = tokens[current - 1].col;
     } else if (peek().type == TOK_IDENT || peek().type == TOK_VAR_REF) {
         TokenType matched_type = peek().type;
         advance();
         int name_line = tokens[current - 1].line;
+        int name_col  = tokens[current - 1].col;
         char name[64];
         strncpy(name, tokens[current - 1].lexeme, 63);
         name[63] = '\0';
@@ -76,6 +79,7 @@ static Expr* parse_primary() {
             expr->var_name[63] = '\0';
             expr->arg_count = 0;
             expr->line = name_line;
+            expr->col  = name_col;
 
             while (expr->arg_count < MAX_PARAMS &&
                    current < token_count &&
@@ -91,6 +95,7 @@ static Expr* parse_primary() {
                     arg->var_name[63] = '\0';
                 }
                 arg->line = tokens[current - 1].line;
+                arg->col  = tokens[current - 1].col;
                 expr->args[expr->arg_count++] = arg;
             }
         } else {
@@ -98,8 +103,10 @@ static Expr* parse_primary() {
             strncpy(expr->var_name, name, 63);
             expr->var_name[63] = '\0';
             expr->line = name_line;
+            expr->col  = name_col;
         }
     } else {
+        set_error_col(peek().col);
         error_at(peek().line, "Expected number or identifier");
         expr = create_expr(EXPR_NUMBER);
         expr->num_val = 0;
@@ -468,6 +475,7 @@ ASTNode* parse(Token* tok, int count) {
                 char hint_msg[128];
                 snprintf(hint_msg, sizeof(hint_msg), "Did you mean '%s'?", suggestion);
                 set_error_hint(hint_msg);
+                set_error_col(tokens[0].col);
                 error_at(tokens[0].line, "Unknown keyword '%s'", tokens[0].lexeme);
             }
         }

@@ -1,0 +1,6 @@
+# Step 6 — inpt numeric validation
+# Input: "abc" (non-numeric) via stdin
+# Expected: error message then exit 1
+
+a = inpt
+a -> emt

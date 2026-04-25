@@ -26,6 +26,7 @@ typedef struct {
     TokenType  type;
     char       lexeme[64];
     int        line;
+    int        col;  /* 1-based column at start of token */
 } Token;
 
 Token* tokenise(const char* src, int* count);

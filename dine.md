@@ -1,3 +1,144 @@
+# v0.3.2 Steps 5 & 6 — Error Context Line (U8) + inpt Numeric Validation (U5): Completion Notes
+
+## What Was Done
+
+Implemented **Step 5** (Error context line, U8) and **Step 6** (`inpt` numeric validation, U5) from `plan.md`, upgrading Trionary to the full v0.3.2 feature set for these two items.
+
+---
+
+## Step 5 — Error Context Line (U8)
+
+### Summary
+
+When an error is reported, the interpreter now prints the offending source line beneath the error message, with a `^` caret pointing at the column of the problematic token where available:
+
+```
+Error: Unknown keyword 'list' at line 1
+  1 | list [1,2,3] -> emt
+      ^
+  Hint: Did you mean 'lst'?
+```
+
+```
+Error: Undefined variable 'undef' at line 2
+  2 | lst [1,2,3] | trn *undef -> emt
+                         ^
+```
+
+### Changes Made
+
+#### Modified Files
+
+| File | Change |
+|------|--------|
+| `include/lexer.h` | Added `col` (1-based column) field to `Token` struct |
+| `src/lexer.c` | Added module-level `col` static; updated `skip_whitespace_and_comments` to advance `col`; updated `make_token` to accept and store `token_col`; every token-production branch now saves `token_col` before consuming characters and increments `col` accordingly |
+| `include/error.h` | Added `set_error_source(const char *src)` and `set_error_col(int col)` declarations with documentation |
+| `src/error.c` | Added `source_buf` and `error_col` module-level statics; implemented `set_error_source()` and `set_error_col()`; updated `error_at()` to walk `source_buf` to the specified line, print `  N | <line>`, and (when `error_col > 0`) print a `^` caret at the correct column |
+| `include/parser.h` | Added `col` field to the `Expr` struct (alongside the existing `line` field) |
+| `src/parser.c` | `create_expr()` initialises `expr->col = 0`; `parse_primary()` stores the token's `col` in the created expression node; keyword-hint path adds `set_error_col(tokens[0].col)` before `error_at()`; `parse_primary()` error path adds `set_error_col(peek().col)` before `error_at()` |
+| `src/exec.c` | Added `#include <errno.h>`; `eval_expr()` calls `set_error_col(expr->col)` before each `error_at()` for `EXPR_VARIABLE` (undefined variable) and `EXPR_CALL` (undefined function / arity mismatch) errors |
+| `src/main.c` | Added `#include "error.h"`; calls `set_error_source(source)` immediately after `read_file()` succeeds; moved `free(source)` to after the execution loop so the buffer remains valid if `error_at()` is called during parse or execution |
+
+#### Updated Test Expected Files
+
+| File | Change |
+|------|--------|
+| `tests/test_invalid.expected` | Added context line + caret for `print "hello"` at line 1 |
+| `tests/test_keyword_hint.expected` | Added context line + caret; hint line order preserved (context before hint) |
+| `tests/test_malformed_trn.expected` | Added context line + caret pointing at `->` at col 21 |
+| `tests/test_trn_undef.expected` | Added context line + caret pointing at `undef` at col 20 |
+
+### Design Decisions
+
+- **Source buffer stored by pointer, not copied.** `set_error_source()` stores the pointer passed by the caller. `main.c` now delays `free(source)` until after the execution loop, guaranteeing the buffer is alive whenever `error_at()` fires.
+- **`col` in `Token` only; propagated to `Expr` as needed.** Adding `col` to the `Token` struct is a small, non-breaking change. It is propagated to `Expr` nodes (where runtime errors reference expressions) without modifying every AST node type, keeping the diff minimal.
+- **`set_error_col()` is opt-in.** Error sites that lack precise column information (e.g. `AssignNode`, `InptNode` errors) simply omit the `set_error_col()` call; `error_at()` still prints the source line, just without a caret. This avoids misleading carets at column 1.
+- **Context disabled for line 0 errors.** Internal errors (e.g. "Symbol table full") use `error_at(0, …)`. The context-printing code checks `line > 0` to avoid scanning a buffer for a non-existent line.
+
+---
+
+## Step 6 — `inpt` Numeric Validation (U5)
+
+### Summary
+
+Reading input via `a = inpt` or `inpt a` now validates that the value is a number. If the user supplies a non-numeric string, the interpreter reports a clear error and exits:
+
+```
+Error: Expected a number, got 'abc' at line 5
+  5 | a = inpt
+```
+
+Previously, `scanf` would silently return `0` on invalid input; the program would continue with a wrong value.
+
+### Changes Made
+
+#### Modified Files
+
+| File | Change |
+|------|--------|
+| `src/exec.c` | Replaced both `scanf("%lf", &val)` calls (in `exec_assign` for `ASSIGN_INPUT` and in `exec_inpt`) with a shared `read_numeric_input(line)` helper that uses `fgets` + `strtod` + `endptr` checking. Invalid or non-numeric input triggers `error_at()` with the message `Expected a number, got '<input>'`. EOF triggers `Expected numeric input but got EOF`. |
+
+#### New Test Files
+
+| File | Purpose |
+|------|---------|
+| `tests/test_inpt_invalid.tri` | Script using `a = inpt` with non-numeric stdin input |
+| `tests/test_inpt_invalid.stdin` | Stdin fixture: `abc` |
+| `tests/test_inpt_invalid.expected` | Expected error output |
+
+### Design Decisions
+
+- **`fgets` + `strtod` instead of `scanf`.** `strtod` with `endptr` checking is the idiomatic C way to validate numeric strings. The `endptr` check (`endptr == buf` → no digits found; `*endptr != '\0'` after trimming trailing whitespace → trailing garbage) correctly rejects strings like `"abc"`, `"10abc"`, and empty strings, while accepting `"10"`, `"3.14"`, `"-5"`, and `" 10 "`.
+- **Shared helper `read_numeric_input()`.**  Both `exec_assign` (ASSIGN_INPUT) and `exec_inpt` now delegate to a single static function, eliminating duplication and ensuring consistent behaviour.
+- **Valid programs unaffected.** The existing `test_inpt` and `test_inpt_prompt` tests supply valid numeric input (`10`, `20`) and continue to pass without any change.
+
+---
+
+## Verification
+
+```
+$ make clean && make
+$ make test
+# Results: 21 passed, 0 failed
+
+# Context line in action:
+$ ./tri run tests/test_keyword_hint.tri
+# Error: Unknown keyword 'list' at line 1
+#   1 | list [1,2,3] -> emt
+#       ^
+#   Hint: Did you mean 'lst'?
+
+# inpt validation:
+$ echo "abc" | ./tri run tests/test_inpt_invalid.tri
+# Error: Expected a number, got 'abc' at line 5
+#   5 | a = inpt
+```
+
+---
+
+## Files Touched (summary)
+
+```
+include/lexer.h                   ← col field added to Token
+src/lexer.c                       ← col tracking throughout tokenise()
+include/error.h                   ← set_error_source(), set_error_col() declared
+src/error.c                       ← source_buf, error_col; context-line printing in error_at()
+include/parser.h                  ← col field added to Expr
+src/parser.c                      ← create_expr() sets col=0; parse_primary() stores col; set_error_col() at key error sites
+src/exec.c                        ← set_error_col() at expr error sites; read_numeric_input() helper; fgets+strtod validation
+src/main.c                        ← set_error_source(); free(source) moved after execution loop
+tests/test_invalid.expected       ← updated (context line + caret)
+tests/test_keyword_hint.expected  ← updated (context line + caret + hint)
+tests/test_malformed_trn.expected ← updated (context line + caret at col 21)
+tests/test_trn_undef.expected     ← updated (context line + caret at col 20)
+tests/test_inpt_invalid.tri       ← new
+tests/test_inpt_invalid.stdin     ← new
+tests/test_inpt_invalid.expected  ← new
+```
+
+---
+
 # v0.3.1 — Assignment Extension (IDENT / inpt RHS): Completion Notes
 
 ## What Was Done

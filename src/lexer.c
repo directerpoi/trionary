@@ -8,13 +8,15 @@
 #define MAX_TOKENS 4096
 
 static int line = 1;
+static int col  = 1;
 
-static Token make_token(TokenType type, const char* lexeme) {
+static Token make_token(TokenType type, const char* lexeme, int token_col) {
     Token tok;
     tok.type = type;
     strncpy(tok.lexeme, lexeme, 63);
     tok.lexeme[63] = '\0';
     tok.line = line;
+    tok.col  = token_col;
     return tok;
 }
 
@@ -46,10 +48,10 @@ static TokenType keyword_type(const char* word) {
 static void skip_whitespace_and_comments(const char* src, int* i) {
     while (src[*i] != '\0') {
         if (src[*i] == ' ' || src[*i] == '\t' || src[*i] == '\r') {
-            (*i)++;
+            (*i)++; col++;
         } else if (src[*i] == '#') {
             /* Skip to end of line (but don't consume the newline) */
-            while (src[*i] != '\n' && src[*i] != '\0') (*i)++;
+            while (src[*i] != '\n' && src[*i] != '\0') { (*i)++; col++; }
         } else {
             break;
         }
@@ -67,6 +69,7 @@ Token* tokenise(const char* src, int* count) {
 
     int i = 0, n = 0;
     line = 1;
+    col  = 1;
 
     while (src[i] != '\0') {
         skip_whitespace_and_comments(src, &i);
@@ -74,136 +77,139 @@ Token* tokenise(const char* src, int* count) {
 
         // Keywords and identifiers
         if (isalpha(src[i]) || src[i] == '_') {
+            int token_col = col;
             char word[64];
             int wi = 0;
             while ((isalpha(src[i]) || isdigit(src[i]) || src[i] == '_') && wi < 63) {
-                word[wi++] = src[i++];
+                word[wi++] = src[i++]; col++;
             }
             word[wi] = '\0';
 
             if (is_keyword(word)) {
-                tokens[n++] = make_token(keyword_type(word), word);
+                tokens[n++] = make_token(keyword_type(word), word, token_col);
             } else {
-                tokens[n++] = make_token(TOK_IDENT, word);
+                tokens[n++] = make_token(TOK_IDENT, word, token_col);
             }
             continue;
         }
 
         // Numbers (integer or float)
         if (isdigit(src[i]) || (src[i] == '-' && isdigit(src[i+1]))) {
+            int token_col = col;
             char num[64];
             int ni = 0;
-            if (src[i] == '-') num[ni++] = src[i++];
+            if (src[i] == '-') { num[ni++] = src[i++]; col++; }
             while (isdigit(src[i]) && ni < 63) {
-                num[ni++] = src[i++];
+                num[ni++] = src[i++]; col++;
             }
             if (src[i] == '.' && isdigit(src[i+1]) && ni < 63) {
-                num[ni++] = src[i++];
+                num[ni++] = src[i++]; col++;
                 while (isdigit(src[i]) && ni < 63) {
-                    num[ni++] = src[i++];
+                    num[ni++] = src[i++]; col++;
                 }
             }
             num[ni] = '\0';
-            tokens[n++] = make_token(TOK_NUMBER, num);
+            tokens[n++] = make_token(TOK_NUMBER, num, token_col);
             continue;
         }
 
         // Single and double character operators/symbols
         if (src[i] == '|') {
-            tokens[n++] = make_token(TOK_PIPE, "|");
-            i++;
+            tokens[n++] = make_token(TOK_PIPE, "|", col);
+            i++; col++;
             continue;
         }
 
         if (src[i] == '\n') {
-            tokens[n++] = make_token(TOK_NEWLINE, "\n");
-            line++;
-            i++;
+            tokens[n++] = make_token(TOK_NEWLINE, "\n", col);
+            line++; i++; col = 1;
             continue;
         }
 
         if (src[i] == '?' && src[i+1] != '\0' && src[i+1] == '?') {
-            tokens[n++] = make_token(TOK_COALESCE, "??");
-            i += 2;
+            tokens[n++] = make_token(TOK_COALESCE, "??", col);
+            i += 2; col += 2;
             continue;
         }
 
         if (src[i] == '-' && src[i+1] == '>') {
-            tokens[n++] = make_token(TOK_ARROW, "->");
-            i += 2;
+            tokens[n++] = make_token(TOK_ARROW, "->", col);
+            i += 2; col += 2;
             continue;
         }
 
         if (src[i] == '[') {
-            tokens[n++] = make_token(TOK_LBRACK, "[");
-            i++;
+            tokens[n++] = make_token(TOK_LBRACK, "[", col);
+            i++; col++;
             continue;
         }
 
         if (src[i] == ']') {
-            tokens[n++] = make_token(TOK_RBRACK, "]");
-            i++;
+            tokens[n++] = make_token(TOK_RBRACK, "]", col);
+            i++; col++;
             continue;
         }
 
         if (src[i] == '=') {
-            tokens[n++] = make_token(TOK_ASSIGN, "=");
-            i++;
+            tokens[n++] = make_token(TOK_ASSIGN, "=", col);
+            i++; col++;
             continue;
         }
 
         if (src[i] == ',') {
-            tokens[n++] = make_token(TOK_OP, ",");
-            i++;
+            tokens[n++] = make_token(TOK_OP, ",", col);
+            i++; col++;
             continue;
         }
 
         // Comparison operators
         if (is_op_char(src[i])) {
+            int token_col = col;
             char op[4];
             op[0] = src[i];
             if ((src[i] == '>' || src[i] == '<' || src[i] == '=' || src[i] == '!') && 
                 src[i+1] == '=') {
                 op[1] = src[i+1];
                 op[2] = '\0';
-                tokens[n++] = make_token(TOK_OP, op);
-                i += 2;
+                i += 2; col += 2;
             } else {
                 op[1] = '\0';
-                tokens[n++] = make_token(TOK_OP, op);
-                i++;
+                i++; col++;
             }
+            tokens[n++] = make_token(TOK_OP, op, token_col);
             /* If the operator is immediately followed (no whitespace) by an alphabetic
                character or underscore, emit the identifier as TOK_VAR_REF so the parser
                can distinguish a variable reference (e.g. *a) from a numeric literal
                (e.g. *10). */
             if (isalpha(src[i]) || src[i] == '_') {
+                int ref_col = col;
                 char word[64];
                 int wi = 0;
                 while ((isalpha(src[i]) || isdigit(src[i]) || src[i] == '_') && wi < 63) {
-                    word[wi++] = src[i++];
+                    word[wi++] = src[i++]; col++;
                 }
                 word[wi] = '\0';
-                tokens[n++] = make_token(TOK_VAR_REF, word);
+                tokens[n++] = make_token(TOK_VAR_REF, word, ref_col);
             }
             continue;
         }
 
         // String literals (used for inpt prompts)
         if (src[i] == '"') {
+            int token_col = col;
             char str[64];
             int si = 0;
-            i++; /* skip opening quote */
+            i++; col++; /* skip opening quote */
             while (src[i] != '"' && src[i] != '\0' && src[i] != '\n' && si < 63) {
-                str[si++] = src[i++];
+                str[si++] = src[i++]; col++;
             }
             if (src[i] != '"') {
                 error_at(line, "Unterminated string literal");
             } else {
-                i++; /* skip closing quote */
+                i++; col++; /* skip closing quote */
             }
             str[si] = '\0';
-            tokens[n++] = make_token(TOK_STRING, str);
+            tokens[n++] = make_token(TOK_STRING, str, token_col);
             continue;
         }
 
@@ -211,7 +217,7 @@ Token* tokenise(const char* src, int* count) {
         error_at(line, "Unexpected character '%c'", src[i]);
     }
 
-    tokens[n++] = make_token(TOK_EOF, "");
+    tokens[n++] = make_token(TOK_EOF, "", col);
     *count = n;
     return tokens;
 }

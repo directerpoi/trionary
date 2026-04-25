@@ -1,0 +1,2 @@
+Error: Expected a number, got 'abc' at line 5
+  5 | a = inpt

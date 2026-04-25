@@ -39,6 +39,7 @@ typedef struct Expr {
     struct Expr  *args[MAX_PARAMS]; /* EXPR_CALL arguments */
     int           arg_count;
     int           line; /* source line where this expression token was seen */
+    int           col;  /* 1-based column of the primary token (0 if unknown) */
 } Expr;
 
 typedef struct ArithNode {

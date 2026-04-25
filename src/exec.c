@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 
 /* djb2 hash, folded into [0, SCOPE_CAPACITY). */
 static unsigned int scope_hash(const char* name) {
@@ -140,6 +141,7 @@ static double eval_expr(Expr* expr, SymTable* sym, FuncTable* ft) {
             
         case EXPR_VARIABLE:
             if (!sym_exists(sym, expr->var_name)) {
+                if (expr->col > 0) set_error_col(expr->col);
                 error_at(expr->line, "Undefined variable '%s'", expr->var_name);
             }
             return sym_get(sym, expr->var_name);
@@ -177,9 +179,11 @@ static double eval_expr(Expr* expr, SymTable* sym, FuncTable* ft) {
                 }
             }
             if (!fd) {
+                if (expr->col > 0) set_error_col(expr->col);
                 error_at(expr->line, "Undefined function '%s'", expr->var_name);
             }
             if (expr->arg_count != fd->param_count) {
+                if (expr->col > 0) set_error_col(expr->col);
                 error_at(expr->line,
                          "Function '%s' expects %d argument(s) but got %d",
                          expr->var_name, fd->param_count, expr->arg_count);
@@ -279,6 +283,30 @@ static void exec_pipeline(PipelineNode* node, SymTable* sym, FuncTable* ft) {
     }
 }
 
+/* read_numeric_input: read one line from stdin and parse it as a double.
+ * On success, stores the value in *out and returns 1.
+ * On failure (non-numeric input or EOF), calls error_at() and does not return. */
+static double read_numeric_input(int line) {
+    char buf[256];
+    if (!fgets(buf, sizeof(buf), stdin)) {
+        error_at(line, "Expected numeric input but got EOF");
+    }
+    /* Strip trailing newline / carriage-return. */
+    size_t len = strlen(buf);
+    while (len > 0 && (buf[len - 1] == '\n' || buf[len - 1] == '\r'))
+        buf[--len] = '\0';
+
+    char *endptr;
+    errno = 0;
+    double val = strtod(buf, &endptr);
+    /* Skip any trailing whitespace after the number. */
+    while (*endptr == ' ' || *endptr == '\t') endptr++;
+    if (endptr == buf || *endptr != '\0') {
+        error_at(line, "Expected a number, got '%s'", buf);
+    }
+    return val;
+}
+
 static void exec_assign(AssignNode* node, SymTable* sym) {
     double val;
     switch (node->rhs_type) {
@@ -291,12 +319,9 @@ static void exec_assign(AssignNode* node, SymTable* sym) {
             }
             val = sym_get(sym, node->rhs_name);
             break;
-        case ASSIGN_INPUT: {
-            if (scanf("%lf", &val) != 1) {
-                error_at(node->line, "Failed to read numeric input for '%s'", node->name);
-            }
+        case ASSIGN_INPUT:
+            val = read_numeric_input(node->line);
             break;
-        }
         default:
             val = 0.0;
             break;
@@ -309,10 +334,7 @@ static void exec_inpt(InptNode* node, SymTable* sym) {
         printf("%s", node->prompt);
         fflush(stdout);
     }
-    double val;
-    if (scanf("%lf", &val) != 1) {
-        error_at(node->line, "Failed to read numeric input for '%s'", node->var_name);
-    }
+    double val = read_numeric_input(node->line);
     sym_set(sym, node->var_name, val);
 }
 
