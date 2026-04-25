@@ -248,7 +248,15 @@ static double eval_expr(Expr* expr, SymTable* sym, FuncTable* ft) {
 }
 
 static double apply_condition(double val, Condition* cond, SymTable* sym) {
-    double cmp = cond->is_variable ? sym_get(sym, cond->var_name) : cond->value;
+    double cmp;
+    if (cond->is_variable) {
+        if (!sym_exists(sym, cond->var_name)) {
+            error_at(cond->line, "Undefined variable '%s' in whn condition", cond->var_name);
+        }
+        cmp = sym_get(sym, cond->var_name);
+    } else {
+        cmp = cond->value;
+    }
     switch (cond->op) {
         case OP_GT:  return val > cmp ? 1.0 : 0.0;
         case OP_LT:  return val < cmp ? 1.0 : 0.0;
