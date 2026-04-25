@@ -247,6 +247,10 @@ static PipelineNode* parse_pipeline(int lst_line) {
     node->has_transform = 0;
     node->has_sum = 0;
     node->line = lst_line;
+    node->emt_label[0] = '\0';
+    node->has_emt_label = 0;
+    node->emt_sep[0] = '\0';
+    node->has_emt_sep = 0;
 
     if (!match(TOK_LBRACK)) {
         error_at(peek().line, "Expected '[' after 'lst'");
@@ -459,6 +463,8 @@ ASTNode* parse(Token* tok, int count) {
     ASTNode* ast = malloc(sizeof(ASTNode));
     ast->type = NODE_EMT;
     ast->stmt_type = STMT_EMTPY;
+    ast->emt_label[0] = '\0';
+    ast->has_emt_label = 0;
 
     if (token_count == 0 || tokens[0].type == TOK_EOF) {
         return ast;
@@ -487,6 +493,13 @@ ASTNode* parse(Token* tok, int count) {
                 error_at(peek().line, "Expected 'emt' after '->'");
             }
         }
+        /* Optional label after -> emt (U1) */
+        if (peek().type == TOK_STRING) {
+            strncpy(ast->emt_label, peek().lexeme, 63);
+            ast->emt_label[63] = '\0';
+            ast->has_emt_label = 1;
+            advance();
+        }
     } else if (tokens[0].type == TOK_LST) {
         int lst_line = tokens[current].line;
         advance();
@@ -500,6 +513,36 @@ ASTNode* parse(Token* tok, int count) {
                 }
             }
         }
+        /* Optional label after emt (U1) */
+        if (peek().type == TOK_STRING) {
+            strncpy(ast->node.pipeline->emt_label, peek().lexeme, 63);
+            ast->node.pipeline->emt_label[63] = '\0';
+            ast->node.pipeline->has_emt_label = 1;
+            advance();
+        }
+        /* Optional sep "string" after emt [label] (U10) */
+        if (peek().type == TOK_IDENT && strcmp(peek().lexeme, "sep") == 0) {
+            advance(); /* consume "sep" */
+            if (peek().type == TOK_STRING) {
+                strncpy(ast->node.pipeline->emt_sep, peek().lexeme, 63);
+                ast->node.pipeline->emt_sep[63] = '\0';
+                ast->node.pipeline->has_emt_sep = 1;
+                advance();
+            } else {
+                error_at(peek().line, "Expected string after 'sep'");
+            }
+        }
+    } else if (tokens[0].type == TOK_EMT) {
+        /* Standalone emt ["label"] expr  (U1) */
+        advance(); /* consume emt */
+        if (peek().type == TOK_STRING) {
+            strncpy(ast->emt_label, peek().lexeme, 63);
+            ast->emt_label[63] = '\0';
+            ast->has_emt_label = 1;
+            advance();
+        }
+        ast->stmt_type = STMT_ARITH;
+        ast->node.arith = (ArithNode*)parse_coalesce();
     } else if (tokens[0].type == TOK_FN) {
         ast->stmt_type = STMT_FN_DEF;
         ast->node.fn_def = parse_fn_def();

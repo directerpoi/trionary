@@ -1,3 +1,161 @@
+# v0.3.2 Steps 7 & 8 — `emt` Label Prefix (U1) + `emt` Separator Control (U10): Completion Notes
+
+## What Was Done
+
+Implemented **Step 7** (`emt` label prefix, U1) and **Step 8** (`emt` separator control, U10) from `plan.md`.
+
+---
+
+## Step 7 — `emt` Label Prefix (U1)
+
+### Summary
+
+The `emt` statement now accepts an optional string literal prefix that is printed before the value on the same output line:
+
+```tri
+emt "Result:" 42 + 8    # Output: Result: 50
+x = 99
+emt "x =" x             # Output: x = 99
+lst [10,20,30] -> emt "Item:"
+# Output:
+# Item: 10
+# Item: 20
+# Item: 30
+lst [1,2,3,4,5] | sum -> emt "Sum:"   # Output: Sum: 15
+42 + 8 -> emt "Arith:"                # Output: Arith: 50
+```
+
+The label syntax is additive: existing scripts without a label continue to work exactly as before.
+
+### Grammar change (additive only)
+
+```
+emt_stmt  →  'emt'  ( STRING_LITERAL )?  expr
+pipeline  →  'lst' '[' … ']' pipeline_ops* ( '->' )? 'emt' ( STRING_LITERAL )?
+arith     →  expr  '->'  'emt'  ( STRING_LITERAL )?
+```
+
+### Changes Made
+
+#### Modified Files
+
+| File | Change |
+|------|--------|
+| `include/parser.h` | Added `emt_label[64]` and `has_emt_label` fields to `PipelineNode`; added `emt_label[64]` and `has_emt_label` fields to `ASTNode` |
+| `include/output.h` | Added `emit_labeled_value(const char* label, double v)` declaration |
+| `src/output.c` | Implemented `emit_labeled_value()` — prints `"label value\n"` using the same integer/float formatting as `emit_value()` |
+| `src/parser.c` | Initialises `emt_label[0]='\0'` and `has_emt_label=0` on new `ASTNode` and `PipelineNode`; after consuming `TOK_EMT` in the pipeline path, consumes an optional `TOK_STRING` into `pipeline->emt_label`; same for the `expr -> emt` path (stored in `ast->emt_label`); adds a new `TOK_EMT`-leading branch to `parse()` for standalone `emt ["label"] expr` statements |
+| `src/exec.c` | `STMT_ARITH` dispatch calls `emit_labeled_value()` when `ast->has_emt_label`; `exec_pipeline()` calls `emit_labeled_value()` per item (or for the sum) when `pipeline->has_emt_label` |
+| `src/main.c` | `TOK_EMT`-leading dispatch branch added to the statement-slicing loop; optional `TOK_STRING` after `TOK_EMT` consumed in both the `lst` and `expr -> emt` branches |
+
+#### New Test Files
+
+| File | Purpose |
+|------|---------|
+| `tests/test_emt_label.tri` | Exercises all label-prefix forms |
+| `tests/test_emt_label.expected` | Expected output |
+
+### Design Decisions
+
+- **Label + space before value.** `emit_labeled_value()` prints `"%s %.0f\n"` / `"%s %.6g\n"`, which inserts a single space between the label string and the numeric value. Users who want no space can include it in the label: `emt "Total:" expr` → `Total: 42`.
+- **Stored on `ASTNode` (outside the union).** Adding `emt_label` / `has_emt_label` directly to `ASTNode` (not inside the `node` union) keeps the change non-intrusive: the two fields apply to both `STMT_ARITH` (standalone and `-> emt`) and `STMT_PIPELINE` without requiring new node types.
+- **`TOK_STRING` already existed.** The string-literal token was introduced in an earlier step for `inpt` prompts; no lexer changes were needed.
+
+---
+
+## Step 8 — `emt` Separator Control (U10)
+
+### Summary
+
+A `sep "string"` modifier after `emt` controls the delimiter used when a pipeline emits multiple values:
+
+```tri
+lst [1,2,3,4,5] | whn >2 -> emt sep ","   # Output: 3,4,5
+lst [1,2,3]              -> emt sep " | "  # Output: 1 | 2 | 3
+lst [1,2,3] -> emt "Values:" sep ","       # Output: Values: 1,2,3
+```
+
+The default (no `sep`) is unchanged — each value is printed on its own line.
+
+### Grammar change (additive only)
+
+```
+pipeline  →  'lst' '[' … ']' pipeline_ops* ( '->' )? 'emt' ( STRING_LITERAL )? ( 'sep' STRING_LITERAL )?
+```
+
+### Changes Made
+
+#### Modified Files
+
+| File | Change |
+|------|--------|
+| `include/parser.h` | Added `emt_sep[64]` and `has_emt_sep` fields to `PipelineNode` |
+| `include/output.h` | Added `emit_value_no_newline(double v)` declaration |
+| `src/output.c` | Implemented `emit_value_no_newline()` — same integer/float logic as `emit_value()` but without the trailing `\n` |
+| `src/parser.c` | After the optional label, checks for `TOK_IDENT` with lexeme `"sep"` followed by `TOK_STRING`; stores in `pipeline->emt_sep` / `pipeline->has_emt_sep` |
+| `src/exec.c` | `exec_pipeline()` takes a fast-path when `has_emt_sep && !do_sum`: iterates values, prints `sep` between items (first-item flag), prepends label if `has_emt_label`, calls `emit_value_no_newline()` per item, then prints a final `\n` |
+| `src/main.c` | After consuming `TOK_EMT` (and optional label) in the `lst` branch, also consumes optional `IDENT("sep") STRING` |
+
+#### New Test Files
+
+| File | Purpose |
+|------|---------|
+| `tests/test_emt_sep.tri` | Exercises `sep`-only, `sep` with label, and `sep` with filter+transform |
+| `tests/test_emt_sep.expected` | Expected output |
+
+### Design Decisions
+
+- **`sep` treated as a contextual identifier, not a new keyword.** The word `sep` is only meaningful immediately after `emt [label]` in a pipeline; it is recognised by string comparison in the parser, not by a new `TOK_SEP` token type. This avoids reserving a new keyword and keeps the lexer unchanged.
+- **`sep` ignored for `sum` pipelines.** A summed pipeline always produces exactly one value; a separator is irrelevant. The existing `emit_value()` / `emit_labeled_value()` path is used in that case.
+- **`sep` not wired to standalone `emt expr`.** A standalone expression always produces one value, so a separator has no effect. The modifier is only supported in the pipeline context.
+- **First-item flag (no pre-buffering).** Values are streamed through the existing filter/transform logic. A `first_item` flag tracks whether the separator should be prepended, avoiding the need to collect all results before printing.
+
+---
+
+## Verification
+
+```
+$ make clean && make
+$ make test
+# Results: 23 passed, 0 failed
+
+# Label examples:
+$ ./tri run tests/test_emt_label.tri
+# Result: 50
+# x = 99
+# Item: 10
+# Item: 20
+# Item: 30
+# Sum: 15
+# Arith: 50
+
+# Sep examples:
+$ ./tri run tests/test_emt_sep.tri
+# 3,4,5
+# 1 | 2 | 3
+# Values: 1,2,3
+# 10-12
+```
+
+---
+
+## Files Touched (summary)
+
+```
+include/parser.h                  ← emt_label/has_emt_label on PipelineNode and ASTNode; emt_sep/has_emt_sep on PipelineNode
+include/output.h                  ← emit_value_no_newline() and emit_labeled_value() declared
+src/output.c                      ← emit_value_no_newline() and emit_labeled_value() implemented
+src/parser.c                      ← ASTNode/PipelineNode init; optional label + sep parsing after emt; TOK_EMT-leading statement branch
+src/exec.c                        ← STMT_ARITH uses emit_labeled_value(); exec_pipeline() sep fast-path + label support
+src/main.c                        ← TOK_EMT dispatch branch; optional STRING + sep STRING consumed after emt in lst and arith branches
+tests/test_emt_label.tri          ← new
+tests/test_emt_label.expected     ← new
+tests/test_emt_sep.tri            ← new
+tests/test_emt_sep.expected       ← new
+```
+
+---
+
 # v0.3.2 Steps 5 & 6 — Error Context Line (U8) + inpt Numeric Validation (U5): Completion Notes
 
 ## What Was Done

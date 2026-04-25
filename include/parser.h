@@ -97,6 +97,12 @@ typedef struct {
     int has_transform;
     int has_sum;
     int line; /* source line of the lst keyword */
+    /* Optional emt label prefix (U1) */
+    char emt_label[64];
+    int  has_emt_label;
+    /* Optional emt separator control (U10) */
+    char emt_sep[64];
+    int  has_emt_sep;
 } PipelineNode;
 
 /* Function definition node: fn name p1 p2 ... \n expr \n end */
@@ -136,6 +142,9 @@ typedef struct {
         InptNode* inpt;
     } node;
     enum { STMT_EMTPY, STMT_ARITH, STMT_ASSIGN, STMT_PIPELINE, STMT_FN_DEF, STMT_USE, STMT_INPT } stmt_type;
+    /* Optional emt label prefix — set for 'emt "label" expr' and 'expr -> emt "label"' (U1) */
+    char emt_label[64];
+    int  has_emt_label;
 } ASTNode;
 
 ASTNode* parse(Token* tokens, int token_count);

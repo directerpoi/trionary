@@ -1,0 +1,6 @@
+emt "Result:" 42 + 8
+x = 99
+emt "x =" x
+lst [10,20,30] -> emt "Item:"
+lst [1,2,3,4,5] | sum -> emt "Sum:"
+42 + 8 -> emt "Arith:"

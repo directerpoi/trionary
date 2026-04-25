@@ -256,6 +256,31 @@ static double apply_transform(double val, Transform* trn, SymTable* sym, FuncTab
 static void exec_pipeline(PipelineNode* node, SymTable* sym, FuncTable* ft) {
     double acc = 0.0;
     int do_sum = node->has_sum;
+    int has_label = node->has_emt_label;
+    int has_sep   = node->has_emt_sep;
+
+    /* Sep output: collect values and print them joined by the separator. */
+    if (has_sep && !do_sum) {
+        int first_item = 1;
+        for (int i = 0; i < node->list_len; i++) {
+            double val = node->list[i];
+
+            if (node->has_filter) {
+                if (apply_condition(val, node->filter) == 0.0) continue;
+            }
+            if (node->has_transform) {
+                for (int t = 0; t < node->transform_count; t++)
+                    val = apply_transform(val, node->transforms[t], sym, ft);
+            }
+
+            if (!first_item) printf("%s", node->emt_sep);
+            if (first_item && has_label) printf("%s ", node->emt_label);
+            emit_value_no_newline(val);
+            first_item = 0;
+        }
+        if (!first_item) printf("\n");
+        return;
+    }
 
     for (int i = 0; i < node->list_len; i++) {
         double val = node->list[i];
@@ -273,13 +298,18 @@ static void exec_pipeline(PipelineNode* node, SymTable* sym, FuncTable* ft) {
 
         if (do_sum) {
             acc += val;
+        } else if (has_label) {
+            emit_labeled_value(node->emt_label, val);
         } else {
             emit_value(val);
         }
     }
     
     if (do_sum) {
-        emit_value(acc);
+        if (has_label)
+            emit_labeled_value(node->emt_label, acc);
+        else
+            emit_value(acc);
     }
 }
 
@@ -379,7 +409,10 @@ void execute(ASTNode* ast, SymTable* sym, FuncTable* ft) {
             
         case STMT_ARITH: {
             double result = eval_expr((Expr*)ast->node.arith, sym, ft);
-            emit_value(result);
+            if (ast->has_emt_label)
+                emit_labeled_value(ast->emt_label, result);
+            else
+                emit_value(result);
             break;
         }
             
