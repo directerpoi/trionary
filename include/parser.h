@@ -3,7 +3,7 @@
 
 #include "lexer.h"
 
-#define MAX_PARAMS 8
+#define MAX_PARAMS 128
 
 typedef enum {
     NODE_BLOCK,
@@ -22,13 +22,14 @@ typedef enum {
     NODE_BRK,
     NODE_NXT,
     NODE_RET,
-    NODE_LET
+    NODE_LET,
+    NODE_DECL
 } NodeType;
 
 typedef enum {
     OP_ADD, OP_SUB, OP_MUL, OP_DIV, OP_POW,
     OP_GT, OP_LT, OP_GTE, OP_LTE, OP_EQ, OP_NEQ,
-    OP_AND, OP_OR, OP_NOT, OP_IN
+    OP_AND, OP_OR, OP_NOT, OP_IN, OP_COLON
 } OpType;
 
 /* Expression node shared by arithmetic statements and trn expressions. */
@@ -38,17 +39,25 @@ typedef enum {
     EXPR_BINARY,
     EXPR_CALL,       /* function call: fn_name(args...) */
     EXPR_COALESCE,   /* left ?? right — if left is undefined, use right */
-    EXPR_LIST        /* [e1, e2, ...] list literal */
+    EXPR_LIST,       /* [e1, e2, ...] list literal */
+    EXPR_BOOL,
+    EXPR_STRING,
+    EXPR_NIL,
+    EXPR_MAP,
+    EXPR_SET,
+    EXPR_TUPLE,
+    EXPR_PAIR
 } ExprType;
 
 typedef struct Expr {
     ExprType      type;
     double        num_val;
     char          var_name[64];  /* variable name or function name (EXPR_CALL) */
+    char          string_val[256];
     OpType        op;
     struct Expr  *left;
     struct Expr  *right;
-    struct Expr  *args[MAX_PARAMS]; /* EXPR_CALL arguments */
+    struct Expr  *args[MAX_PARAMS]; /* EXPR_CALL arguments, EXPR_LIST, etc. */
     int           arg_count;
     int           line; /* source line where this expression token was seen */
     int           col;  /* 1-based column of the primary token (0 if unknown) */
@@ -101,8 +110,7 @@ typedef struct {
 
 typedef struct {
     NodeType type;
-    double* list;
-    int list_len;
+    Expr*  list_expr;
     Condition* filter;
     Transform** transforms;   /* array of transform pointers */
     int transform_count;      /* number of transforms        */
@@ -143,6 +151,13 @@ typedef struct {
     int      has_prompt;    /* 1 if a prompt string was provided */
     int      line;
 } InptNode;
+
+typedef struct {
+    char  type_name[64];
+    char  var_name[64];
+    Expr* value;
+    int   line;
+} DeclNode;
 
 typedef struct ASTNode ASTNode;
 
@@ -214,11 +229,13 @@ typedef struct ASTNode {
         RptNode*      rpt_node;
         RetNode*      ret_node;
         LetNode*      let_node;
+        DeclNode*     decl_node;
     } node;
     enum { 
         STMT_EMPTY, STMT_ARITH, STMT_ASSIGN, STMT_PIPELINE, STMT_FN_DEF, 
         STMT_USE, STMT_INPT, STMT_IF, STMT_FOR, STMT_WHL, STMT_EACH, 
-        STMT_RPT, STMT_BRK, STMT_NXT, STMT_RET, STMT_LET, STMT_BLOCK
+        STMT_RPT, STMT_BRK, STMT_NXT, STMT_RET, STMT_LET, STMT_BLOCK,
+        STMT_DECL
     } stmt_type;
     /* Optional emt label prefix — set for 'emt "label" expr' and 'expr -> emt "label"' (U1) */
     char emt_label[64];

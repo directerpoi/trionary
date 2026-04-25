@@ -2,30 +2,42 @@
 #include <math.h>
 #include <string.h>
 
+static double to_double(Value v) {
+    if (v.type == VAL_INT) return (double)v.as.integer;
+    if (v.type == VAL_FLOAT) return v.as.float_val;
+    return 0.0;
+}
+
+static Value from_double(double d) {
+    Value v;
+    if (floor(d) == d) {
+        v.type = VAL_INT; v.as.integer = (long long)d;
+    } else {
+        v.type = VAL_FLOAT; v.as.float_val = d;
+    }
+    v.is_immutable = 0;
+    return v;
+}
+
 static Value builtin_floor(Value *args, int n) { 
     (void)n; 
-    Value v; v.type = VAL_NUMBER; v.as.number = floor(args[0].as.number); v.is_immutable = 0;
-    return v; 
+    return from_double(floor(to_double(args[0]))); 
 }
 static Value builtin_ceil (Value *args, int n) { 
     (void)n; 
-    Value v; v.type = VAL_NUMBER; v.as.number = ceil(args[0].as.number); v.is_immutable = 0;
-    return v; 
+    return from_double(ceil(to_double(args[0]))); 
 }
 static Value builtin_abs  (Value *args, int n) { 
     (void)n; 
-    Value v; v.type = VAL_NUMBER; v.as.number = fabs(args[0].as.number); v.is_immutable = 0;
-    return v; 
+    return from_double(fabs(to_double(args[0]))); 
 }
 static Value builtin_sqrt (Value *args, int n) { 
     (void)n; 
-    Value v; v.type = VAL_NUMBER; v.as.number = sqrt(args[0].as.number); v.is_immutable = 0;
-    return v; 
+    return from_double(sqrt(to_double(args[0]))); 
 }
 static Value builtin_pow  (Value *args, int n) { 
     (void)n; 
-    Value v; v.type = VAL_NUMBER; v.as.number = pow(args[0].as.number, args[1].as.number); v.is_immutable = 0;
-    return v; 
+    return from_double(pow(to_double(args[0]), to_double(args[1]))); 
 }
 
 void register_math_module(FuncTable *ft) {

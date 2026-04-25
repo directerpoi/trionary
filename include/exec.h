@@ -8,21 +8,43 @@
 #define SCOPE_CAPACITY 128
 
 typedef enum {
-    VAL_NUMBER,
-    VAL_LIST
+    VAL_NIL,
+    VAL_BOOL,
+    VAL_INT,
+    VAL_FLOAT,
+    VAL_STRING,
+    VAL_ARRAY,
+    VAL_MAP,
+    VAL_SET,
+    VAL_TUPLE,
+    VAL_PAIR
 } ValueType;
 
-typedef struct {
+typedef struct Value Value;
+
+struct Value {
     ValueType type;
     union {
-        double number;
+        int boolean;
+        long long integer;
+        double float_val;
+        char* string;
         struct {
-            double* elements;
-            int     length;
+            Value* elements;
+            int    length;
         } list;
+        struct {
+            Value* keys;
+            Value* values;
+            int    length;
+        } map;
+        struct {
+            Value* key;
+            Value* value;
+        } pair;
     } as;
     int is_immutable;
-} Value;
+};
 
 typedef struct {
     char   name[64];

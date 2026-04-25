@@ -44,7 +44,19 @@ static int is_keyword(const char* word) {
            strcmp(word, "or") == 0 ||
            strcmp(word, "in") == 0 ||
            strcmp(word, "let") == 0 ||
-           strcmp(word, "rpt") == 0;
+           strcmp(word, "rpt") == 0 ||
+           strcmp(word, "str") == 0 ||
+           strcmp(word, "arr") == 0 ||
+           strcmp(word, "bool") == 0 ||
+           strcmp(word, "true") == 0 ||
+           strcmp(word, "fls") == 0 ||
+           strcmp(word, "nil") == 0 ||
+           strcmp(word, "map") == 0 ||
+           strcmp(word, "int") == 0 ||
+           strcmp(word, "flt") == 0 ||
+           strcmp(word, "pair") == 0 ||
+           strcmp(word, "tpl") == 0 ||
+           strcmp(word, "set") == 0;
 }
 
 static TokenType keyword_type(const char* word) {
@@ -72,6 +84,18 @@ static TokenType keyword_type(const char* word) {
     if (strcmp(word, "in") == 0) return TOK_IN;
     if (strcmp(word, "let") == 0) return TOK_LET;
     if (strcmp(word, "rpt") == 0) return TOK_RPT;
+    if (strcmp(word, "str") == 0) return TOK_STR;
+    if (strcmp(word, "arr") == 0) return TOK_ARR;
+    if (strcmp(word, "bool") == 0) return TOK_BOOL;
+    if (strcmp(word, "true") == 0) return TOK_TRUE;
+    if (strcmp(word, "fls") == 0) return TOK_FLS;
+    if (strcmp(word, "nil") == 0) return TOK_NIL;
+    if (strcmp(word, "map") == 0) return TOK_MAP;
+    if (strcmp(word, "int") == 0) return TOK_INT;
+    if (strcmp(word, "flt") == 0) return TOK_FLT;
+    if (strcmp(word, "pair") == 0) return TOK_PAIR;
+    if (strcmp(word, "tpl") == 0) return TOK_TPL;
+    if (strcmp(word, "set") == 0) return TOK_SET;
     return TOK_ERROR;
 }
 
@@ -180,26 +204,44 @@ Token* tokenise(const char* src, int* count) {
             continue;
         }
 
+        if (src[i] == '{') {
+            tokens[n++] = make_token(TOK_LBRACE, "{", col);
+            i++; col++;
+            continue;
+        }
+
+        if (src[i] == '}') {
+            tokens[n++] = make_token(TOK_RBRACE, "}", col);
+            i++; col++;
+            continue;
+        }
+
         if (src[i] == '(') {
-            tokens[n++] = make_token(TOK_OP, "(", col);
+            tokens[n++] = make_token(TOK_LPAREN, "(", col);
             i++; col++;
             continue;
         }
 
         if (src[i] == ')') {
-            tokens[n++] = make_token(TOK_OP, ")", col);
+            tokens[n++] = make_token(TOK_RPAREN, ")", col);
+            i++; col++;
+            continue;
+        }
+
+        if (src[i] == ':') {
+            tokens[n++] = make_token(TOK_COLON, ":", col);
+            i++; col++;
+            continue;
+        }
+
+        if (src[i] == ',') {
+            tokens[n++] = make_token(TOK_COMMA, ",", col);
             i++; col++;
             continue;
         }
 
         if (src[i] == '=') {
             tokens[n++] = make_token(TOK_ASSIGN, "=", col);
-            i++; col++;
-            continue;
-        }
-
-        if (src[i] == ',') {
-            tokens[n++] = make_token(TOK_OP, ",", col);
             i++; col++;
             continue;
         }
