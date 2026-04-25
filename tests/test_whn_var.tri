@@ -1,0 +1,4 @@
+# whn with a variable threshold
+threshold = 50
+lst [10,30,50,70,90] | whn >= threshold | sum
+emt

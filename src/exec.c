@@ -247,14 +247,23 @@ static double eval_expr(Expr* expr, SymTable* sym, FuncTable* ft) {
     return 0.0;
 }
 
-static double apply_condition(double val, Condition* cond) {
+static double apply_condition(double val, Condition* cond, SymTable* sym) {
+    double cmp;
+    if (cond->is_variable) {
+        if (!sym_exists(sym, cond->var_name)) {
+            error_at(cond->line, "Undefined variable '%s' in whn condition", cond->var_name);
+        }
+        cmp = sym_get(sym, cond->var_name);
+    } else {
+        cmp = cond->value;
+    }
     switch (cond->op) {
-        case OP_GT:  return val > cond->value ? 1.0 : 0.0;
-        case OP_LT:  return val < cond->value ? 1.0 : 0.0;
-        case OP_GTE: return val >= cond->value ? 1.0 : 0.0;
-        case OP_LTE: return val <= cond->value ? 1.0 : 0.0;
-        case OP_EQ:  return val == cond->value ? 1.0 : 0.0;
-        case OP_NEQ: return val != cond->value ? 1.0 : 0.0;
+        case OP_GT:  return val > cmp ? 1.0 : 0.0;
+        case OP_LT:  return val < cmp ? 1.0 : 0.0;
+        case OP_GTE: return val >= cmp ? 1.0 : 0.0;
+        case OP_LTE: return val <= cmp ? 1.0 : 0.0;
+        case OP_EQ:  return val == cmp ? 1.0 : 0.0;
+        case OP_NEQ: return val != cmp ? 1.0 : 0.0;
         default: return 0.0;
     }
 }
@@ -293,7 +302,7 @@ static void exec_pipeline(PipelineNode* node, SymTable* sym, FuncTable* ft) {
             double val = node->list[i];
 
             if (node->has_filter) {
-                if (apply_condition(val, node->filter) == 0.0) continue;
+                if (apply_condition(val, node->filter, sym) == 0.0) continue;
             }
             if (node->has_transform) {
                 for (int t = 0; t < node->transform_count; t++)
@@ -313,7 +322,7 @@ static void exec_pipeline(PipelineNode* node, SymTable* sym, FuncTable* ft) {
         double val = node->list[i];
 
         if (node->has_filter) {
-            double passes = apply_condition(val, node->filter);
+            double passes = apply_condition(val, node->filter, sym);
             if (passes == 0.0) continue;
         }
 

@@ -300,13 +300,22 @@ static PipelineNode* parse_pipeline(int lst_line) {
             cond->op_lexeme[3] = '\0';
             cond->op = get_op_type(cond->op_lexeme);
             cond->line = cond_line;
+            cond->is_variable = 0;
+            cond->var_name[0] = '\0';
 
-            if (!match(TOK_NUMBER)) {
-                error_at(peek().line, "Expected number after condition operator");
+            if (match(TOK_NUMBER)) {
+                cond->value = atof(tokens[current - 1].lexeme);
+            } else if (peek().type == TOK_IDENT || peek().type == TOK_VAR_REF) {
+                advance();
+                cond->is_variable = 1;
+                strncpy(cond->var_name, tokens[current - 1].lexeme, 63);
+                cond->var_name[63] = '\0';
+                cond->value = 0.0;
+            } else {
+                error_at(peek().line, "Expected number or variable after condition operator");
                 free(cond);
                 return node;
             }
-            cond->value = atof(tokens[current - 1].lexeme);
 
             node->filter = cond;
             node->has_filter = 1;
