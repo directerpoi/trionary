@@ -1,33 +1,33 @@
+#define _POSIX_C_SOURCE 200809L
 #include "exec.h"
 #include "output.h"
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 
 static Value builtin_print(Value *args, int n) {
-    (void)n;
-    if (args[0].type == VAL_NUMBER) {
-        emit_value(args[0].as.number);
-    } else if (args[0].type == VAL_LIST) {
-        printf("[");
-        for (int i = 0; i < args[0].as.list.length; i++) {
-            emit_value_no_newline(args[0].as.list.elements[i]);
-            if (i < args[0].as.list.length - 1) printf(", ");
-        }
-        printf("]\n");
+    if (n > 0) {
+        emit_value(args[0]);
     }
-    return args[0];
+    Value res; res.type = VAL_NIL; res.is_immutable = 0;
+    return res;
 }
 
 static Value builtin_read_line(Value *args, int n) {
-    (void)n;
-    char buf[64];
-    if (!fgets(buf, sizeof(buf), stdin)) return args[0];
-    double val;
-    if (sscanf(buf, "%lf", &val) == 1) {
-        Value v; v.type = VAL_NUMBER; v.as.number = val; v.is_immutable = 0;
-        return v;
+    (void)n; (void)args;
+    char buf[256];
+    if (!fgets(buf, sizeof(buf), stdin)) {
+        Value res; res.type = VAL_NIL; res.is_immutable = 0;
+        return res;
     }
-    return args[0];
+    size_t len = strlen(buf);
+    while (len > 0 && (buf[len - 1] == '\n' || buf[len - 1] == '\r'))
+        buf[--len] = '\0';
+    Value res;
+    res.type = VAL_STRING;
+    res.as.string = strdup(buf);
+    res.is_immutable = 0;
+    return res;
 }
 
 void register_io_module(FuncTable *ft) {
@@ -37,7 +37,7 @@ void register_io_module(FuncTable *ft) {
         BuiltinFn   fn;
     } io_funcs[] = {
         { "print",     1, builtin_print     },
-        { "read_line", 1, builtin_read_line },
+        { "read_line", 0, builtin_read_line },
     };
     int nmods = (int)(sizeof(io_funcs) / sizeof(io_funcs[0]));
     for (int i = 0; i < nmods; i++) {

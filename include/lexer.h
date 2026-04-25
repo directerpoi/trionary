@@ -11,9 +11,14 @@ typedef enum {
     TOK_BRK, TOK_NXT, TOK_RET,
     TOK_NOT, TOK_AND, TOK_OR,
     TOK_IN, TOK_LET, TOK_RPT,
+    TOK_STR, TOK_ARR, TOK_BOOL, TOK_TRUE, TOK_FLS, TOK_NIL,
+    TOK_MAP, TOK_INT, TOK_FLT, TOK_PAIR, TOK_TPL, TOK_SET,
     TOK_PIPE,               /* |  */
     TOK_ARROW,              /* -> */
     TOK_LBRACK, TOK_RBRACK,
+    TOK_LBRACE, TOK_RBRACE,
+    TOK_LPAREN, TOK_RPAREN,
+    TOK_COLON, TOK_COMMA,
     TOK_NUMBER,             /* integer or float literal */
     TOK_IDENT,              /* variable name */
     TOK_ASSIGN,             /* = */
@@ -24,7 +29,7 @@ typedef enum {
     TOK_NEWLINE,            /* newline — used to separate fn params from body */
     TOK_COALESCE,           /* ?? — default/fallback operator */
     TOK_INPT,               /* inpt — interactive numeric input keyword */
-    TOK_STRING              /* "..." — string literal (used for inpt prompts) */
+    TOK_STRING              /* "..." — string literal */
 } TokenType;
 
 typedef struct {

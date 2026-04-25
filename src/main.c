@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/wait.h>
+#include <math.h>
 #include "reader.h"
 #include "lexer.h"
 #include "parser.h"
@@ -233,12 +234,16 @@ int main(int argc, char* argv[]) {
     FuncTable* ft = create_functable();
 
     int script_argc = argc - 3;
-    Value argc_val; argc_val.type = VAL_NUMBER; argc_val.as.number = (double)script_argc; argc_val.is_immutable = 0;
+    Value argc_val; argc_val.type = VAL_INT; argc_val.as.integer = script_argc; argc_val.is_immutable = 0;
     sym_set(sym, "argc", argc_val);
     for (int i = 0; i < script_argc; i++) {
         char argname[32];
         snprintf(argname, sizeof(argname), "arg%d", i);
-        Value arg_val; arg_val.type = VAL_NUMBER; arg_val.as.number = atof(argv[3 + i]); arg_val.is_immutable = 0;
+        Value arg_val;
+        double d = atof(argv[3 + i]);
+        if (floor(d) == d) { arg_val.type = VAL_INT; arg_val.as.integer = (long long)d; }
+        else { arg_val.type = VAL_FLOAT; arg_val.as.float_val = d; }
+        arg_val.is_immutable = 0;
         sym_set(sym, argname, arg_val);
     }
 

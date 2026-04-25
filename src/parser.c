@@ -48,6 +48,7 @@ static OpType get_op_type(const char* op) {
     if (strcmp(op, "or") == 0) return OP_OR;
     if (strcmp(op, "not") == 0) return OP_NOT;
     if (strcmp(op, "in") == 0) return OP_IN;
+    if (strcmp(op, ":") == 0) return OP_COLON;
     return OP_ADD;
 }
 
@@ -66,11 +67,42 @@ static Expr* parse_primary() {
         expr->num_val = atof(global_tokens[current_pos - 1].lexeme);
         expr->line = global_tokens[current_pos - 1].line;
         expr->col  = global_tokens[current_pos - 1].col;
-    } else if (peek().type == TOK_OP && strcmp(peek().lexeme, "(") == 0) {
-        advance();
-        expr = parse_coalesce();
-        if (peek().type == TOK_OP && strcmp(peek().lexeme, ")") == 0) advance();
-        else error_at(peek().line, "Expected ')' after expression");
+    } else if (match(TOK_TRUE)) {
+        expr = create_expr(EXPR_BOOL);
+        expr->num_val = 1.0;
+        expr->line = global_tokens[current_pos - 1].line;
+        expr->col  = global_tokens[current_pos - 1].col;
+    } else if (match(TOK_FLS)) {
+        expr = create_expr(EXPR_BOOL);
+        expr->num_val = 0.0;
+        expr->line = global_tokens[current_pos - 1].line;
+        expr->col  = global_tokens[current_pos - 1].col;
+    } else if (match(TOK_NIL)) {
+        expr = create_expr(EXPR_NIL);
+        expr->line = global_tokens[current_pos - 1].line;
+        expr->col  = global_tokens[current_pos - 1].col;
+    } else if (match(TOK_STRING)) {
+        expr = create_expr(EXPR_STRING);
+        strncpy(expr->string_val, global_tokens[current_pos - 1].lexeme, 255);
+        expr->line = global_tokens[current_pos - 1].line;
+        expr->col  = global_tokens[current_pos - 1].col;
+    } else if (match(TOK_LPAREN)) {
+        int start_line = global_tokens[current_pos-1].line;
+        int start_col = global_tokens[current_pos-1].col;
+        Expr* first = parse_coalesce();
+        if (peek().type == TOK_COMMA) {
+            expr = create_expr(EXPR_TUPLE);
+            expr->line = start_line; expr->col = start_col;
+            expr->args[expr->arg_count++] = first;
+            while (match(TOK_COMMA)) {
+                if (peek().type == TOK_RPAREN) break;
+                expr->args[expr->arg_count++] = parse_coalesce();
+            }
+            if (!match(TOK_RPAREN)) error_at(peek().line, "Expected ')' after tuple literal");
+        } else {
+            if (!match(TOK_RPAREN)) error_at(peek().line, "Expected ')' after expression");
+            expr = first;
+        }
     } else if (match(TOK_LBRACK)) {
         expr = create_expr(EXPR_LIST);
         expr->line = global_tokens[current_pos - 1].line;
@@ -80,28 +112,68 @@ static Expr* parse_primary() {
                 if (expr->arg_count < MAX_PARAMS) {
                     expr->args[expr->arg_count++] = parse_coalesce();
                 } else error_at(peek().line, "Too many elements in list literal");
-            } while (peek().type == TOK_OP && strcmp(peek().lexeme, ",") == 0 && advance().type == TOK_OP);
+            } while (match(TOK_COMMA));
         }
         if (!match(TOK_RBRACK)) error_at(peek().line, "Expected ']' after list literal");
+    } else if (match(TOK_LBRACE)) {
+        expr = create_expr(EXPR_MAP);
+        expr->line = global_tokens[current_pos - 1].line;
+        expr->col = global_tokens[current_pos - 1].col;
+        if (peek().type != TOK_RBRACE) {
+            Expr* first = parse_coalesce();
+            if (peek().type == TOK_COLON) {
+                advance();
+                Expr* val = parse_coalesce();
+                Expr* pair = create_expr(EXPR_PAIR);
+                pair->left = first; pair->right = val;
+                expr->args[expr->arg_count++] = pair;
+                while (match(TOK_COMMA)) {
+                    if (peek().type == TOK_RBRACE) break;
+                    Expr* k = parse_coalesce();
+                    if (!match(TOK_COLON)) error_at(peek().line, "Expected ':' in map literal");
+                    Expr* v = parse_coalesce();
+                    Expr* p = create_expr(EXPR_PAIR);
+                    p->left = k; p->right = v;
+                    expr->args[expr->arg_count++] = p;
+                }
+            } else {
+                expr->type = EXPR_SET;
+                expr->args[expr->arg_count++] = first;
+                while (match(TOK_COMMA)) {
+                    if (peek().type == TOK_RBRACE) break;
+                    expr->args[expr->arg_count++] = parse_coalesce();
+                }
+            }
+        }
+        if (!match(TOK_RBRACE)) error_at(peek().line, "Expected '}' after literal");
     } else if (peek().type == TOK_IDENT || peek().type == TOK_VAR_REF) {
         Token t = advance();
         if (t.type == TOK_IDENT && (peek().type == TOK_NUMBER || peek().type == TOK_IDENT || 
-            (peek().type == TOK_OP && strcmp(peek().lexeme, "(") == 0) || peek().type == TOK_LBRACK)) {
+            peek().type == TOK_LPAREN || peek().type == TOK_LBRACK || peek().type == TOK_LBRACE ||
+            peek().type == TOK_STRING || peek().type == TOK_TRUE || peek().type == TOK_FLS || peek().type == TOK_NIL)) {
             expr = create_expr(EXPR_CALL);
             strncpy(expr->var_name, t.lexeme, 63);
             expr->line = t.line; expr->col = t.col;
             while (expr->arg_count < MAX_PARAMS && (peek().type == TOK_NUMBER || peek().type == TOK_IDENT || 
-                   (peek().type == TOK_OP && strcmp(peek().lexeme, "(") == 0) || peek().type == TOK_LBRACK)) {
-                if (peek().type == TOK_OP && strcmp(peek().lexeme, "(") == 0) {
-                    expr->args[expr->arg_count++] = parse_primary();
-                } else if (peek().type == TOK_LBRACK) {
+                   peek().type == TOK_LPAREN || peek().type == TOK_LBRACK || peek().type == TOK_LBRACE ||
+                   peek().type == TOK_STRING || peek().type == TOK_TRUE || peek().type == TOK_FLS || peek().type == TOK_NIL)) {
+                if (peek().type == TOK_LPAREN || peek().type == TOK_LBRACK || peek().type == TOK_LBRACE) {
                     expr->args[expr->arg_count++] = parse_primary();
                 } else {
                     Token arg_t = advance();
-                    Expr* arg;
+                    Expr* arg = NULL;
                     if (arg_t.type == TOK_NUMBER) {
                         arg = create_expr(EXPR_NUMBER);
                         arg->num_val = atof(arg_t.lexeme);
+                    } else if (arg_t.type == TOK_STRING) {
+                        arg = create_expr(EXPR_STRING);
+                        strncpy(arg->string_val, arg_t.lexeme, 255);
+                    } else if (arg_t.type == TOK_TRUE) {
+                        arg = create_expr(EXPR_BOOL); arg->num_val = 1.0;
+                    } else if (arg_t.type == TOK_FLS) {
+                        arg = create_expr(EXPR_BOOL); arg->num_val = 0.0;
+                    } else if (arg_t.type == TOK_NIL) {
+                        arg = create_expr(EXPR_NIL);
                     } else {
                         arg = create_expr(EXPR_VARIABLE);
                         strncpy(arg->var_name, arg_t.lexeme, 63);
@@ -217,8 +289,22 @@ static Expr* parse_or() {
     return left;
 }
 
-static Expr* parse_coalesce() {
+static Expr* parse_pair() {
     Expr* left = parse_or();
+    if (peek().type == TOK_COLON) {
+        advance();
+        Expr* expr = create_expr(EXPR_PAIR);
+        expr->left = left;
+        expr->right = parse_pair();
+        expr->line = left->line;
+        expr->col = left->col;
+        return expr;
+    }
+    return left;
+}
+
+static Expr* parse_coalesce() {
+    Expr* left = parse_pair();
     if (match(TOK_COALESCE)) {
         Expr* expr = create_expr(EXPR_COALESCE);
         expr->left = left;
@@ -243,6 +329,13 @@ static BlockNode parse_block() {
     return block;
 }
 
+static int can_start_expr(TokenType type) {
+    return type == TOK_NUMBER || type == TOK_IDENT || type == TOK_VAR_REF ||
+           type == TOK_LPAREN || type == TOK_LBRACK || type == TOK_LBRACE ||
+           type == TOK_STRING || type == TOK_TRUE || type == TOK_FLS ||
+           type == TOK_NIL || type == TOK_NOT;
+}
+
 ASTNode* parse_statement() {
     ASTNode* node = calloc(1, sizeof(ASTNode));
     if (peek().type == TOK_IDENT && current_pos + 1 < global_token_count && global_tokens[current_pos+1].type == TOK_ASSIGN) {
@@ -262,6 +355,15 @@ ASTNode* parse_statement() {
         if (match(TOK_IDENT)) strncpy(let->name, global_tokens[current_pos-1].lexeme, 63);
         if (match(TOK_ASSIGN)) let->value = parse_coalesce();
         node->node.let_node = let;
+    } else if (peek().type == TOK_STR || peek().type == TOK_ARR || peek().type == TOK_BOOL ||
+               peek().type == TOK_MAP || peek().type == TOK_INT || peek().type == TOK_FLT ||
+               peek().type == TOK_PAIR || peek().type == TOK_TPL || peek().type == TOK_SET) {
+        node->stmt_type = STMT_DECL;
+        DeclNode* decl = node->node.decl_node = calloc(1, sizeof(DeclNode));
+        decl->line = peek().line;
+        strncpy(decl->type_name, advance().lexeme, 63);
+        if (match(TOK_IDENT)) strncpy(decl->var_name, global_tokens[current_pos-1].lexeme, 63);
+        if (match(TOK_ASSIGN)) decl->value = parse_coalesce();
     } else if (match(TOK_IF)) {
         node->stmt_type = STMT_IF;
         node->node.if_node = calloc(1, sizeof(IfNode));
@@ -317,13 +419,9 @@ ASTNode* parse_statement() {
     } else if (match(TOK_LST)) {
         int line = global_tokens[current_pos-1].line;
         node->stmt_type = STMT_PIPELINE; PipelineNode* p = node->node.pipeline = calloc(1, sizeof(PipelineNode));
-        p->line = line; match(TOK_LBRACK);
-        p->list = malloc(256 * sizeof(double));
-        if (peek().type == TOK_NUMBER) {
-            do { if (match(TOK_NUMBER)) p->list[p->list_len++] = atof(global_tokens[current_pos-1].lexeme);
-            } while (peek().type == TOK_OP && strcmp(peek().lexeme, ",") == 0 && advance().type == TOK_OP);
-        }
-        match(TOK_RBRACK); skip_newlines();
+        p->line = line;
+        p->list_expr = parse_primary(); // Expects TOK_LBRACK and parses EXPR_LIST
+        skip_newlines();
         while (match(TOK_PIPE) || peek().type == TOK_WHN || peek().type == TOK_TRN || peek().type == TOK_SUM) {
             skip_newlines();
             if (match(TOK_WHN)) {
@@ -341,15 +439,24 @@ ASTNode* parse_statement() {
             skip_newlines();
         }
         if (match(TOK_EMT) || (match(TOK_ARROW) && match(TOK_EMT))) {
-            if (peek().type == TOK_STRING) { strncpy(p->emt_label, advance().lexeme, 63); p->has_emt_label = 1; }
+            if (peek().type == TOK_STRING) {
+                strncpy(p->emt_label, advance().lexeme, 63); p->has_emt_label = 1;
+            }
             if (peek().type == TOK_IDENT && strcmp(peek().lexeme, "sep") == 0) {
                 advance(); if (peek().type == TOK_STRING) { strncpy(p->emt_sep, advance().lexeme, 63); p->has_emt_sep = 1; }
             }
         }
     } else if (match(TOK_EMT)) {
-        if (peek().type == TOK_STRING) { strncpy(node->emt_label, advance().lexeme, 63); node->has_emt_label = 1; }
-        node->stmt_type = STMT_ARITH; node->node.arith = (ArithNode*)parse_coalesce();
-    } else if (peek().type == TOK_NUMBER || peek().type == TOK_IDENT || peek().type == TOK_VAR_REF || peek().type == TOK_LBRACK || peek().type == TOK_NOT) {
+        if (peek().type == TOK_STRING && can_start_expr(global_tokens[current_pos+1].type)) {
+            strncpy(node->emt_label, advance().lexeme, 63);
+            node->has_emt_label = 1;
+        }
+        node->stmt_type = STMT_ARITH;
+        node->node.arith = (ArithNode*)parse_coalesce();
+    } else if (peek().type == TOK_NUMBER || peek().type == TOK_IDENT || peek().type == TOK_VAR_REF || 
+               peek().type == TOK_LBRACK || peek().type == TOK_NOT || peek().type == TOK_STRING ||
+               peek().type == TOK_TRUE || peek().type == TOK_FLS || peek().type == TOK_NIL ||
+               peek().type == TOK_LBRACE || peek().type == TOK_LPAREN) {
         if (peek().type == TOK_IDENT) {
             const char* sug = suggest_keyword(peek().lexeme);
             if (sug) {
@@ -360,10 +467,11 @@ ASTNode* parse_statement() {
         }
         node->stmt_type = STMT_ARITH; node->node.arith = (ArithNode*)parse_coalesce();
         if (match(TOK_ARROW) && match(TOK_EMT)) {
-            if (peek().type == TOK_STRING) { strncpy(node->emt_label, advance().lexeme, 63); node->has_emt_label = 1; }
+            if (peek().type == TOK_STRING) {
+                strncpy(node->emt_label, advance().lexeme, 63); node->has_emt_label = 1;
+            }
         }
     } else {
-        /* Do not report error here; let main.c handle skipping unknown tokens. */
         return NULL;
     }
     return node;
@@ -378,8 +486,12 @@ ASTNode* parse(Token* tok, int count) {
 
 void free_expr(Expr* expr) {
     if (!expr) return;
-    if (expr->type == EXPR_BINARY || expr->type == EXPR_COALESCE) { free_expr(expr->left); free_expr(expr->right); }
-    else if (expr->type == EXPR_CALL || expr->type == EXPR_LIST) { for (int i = 0; i < expr->arg_count; i++) free_expr(expr->args[i]); }
+    if (expr->type == EXPR_BINARY || expr->type == EXPR_COALESCE || expr->type == EXPR_PAIR) { 
+        free_expr(expr->left); free_expr(expr->right); 
+    }
+    else if (expr->type == EXPR_CALL || expr->type == EXPR_LIST || expr->type == EXPR_MAP || expr->type == EXPR_SET || expr->type == EXPR_TUPLE) { 
+        for (int i = 0; i < expr->arg_count; i++) free_expr(expr->args[i]); 
+    }
     free(expr);
 }
 
@@ -391,8 +503,10 @@ void free_ast(ASTNode* ast) {
             free(ast->node.block->nodes); free(ast->node.block); break;
         case STMT_ARITH: free_expr((Expr*)ast->node.arith); break;
         case STMT_ASSIGN: if (ast->node.assign->expr) free_expr(ast->node.assign->expr); free(ast->node.assign); break;
+        case STMT_DECL: if (ast->node.decl_node->value) free_expr(ast->node.decl_node->value); free(ast->node.decl_node); break;
         case STMT_PIPELINE:
-            free(ast->node.pipeline->list); if (ast->node.pipeline->filter) free(ast->node.pipeline->filter);
+            if (ast->node.pipeline->list_expr) free_expr(ast->node.pipeline->list_expr);
+            if (ast->node.pipeline->filter) free(ast->node.pipeline->filter);
             for (int i = 0; i < ast->node.pipeline->transform_count; i++) {
                 free_expr(ast->node.pipeline->transforms[i]->expr); free(ast->node.pipeline->transforms[i]);
             }
