@@ -58,6 +58,14 @@ static Expr* create_expr(ExprType type) {
     return expr;
 }
 
+static int can_start_expr(TokenType type) {
+    return type == TOK_NUMBER || type == TOK_IDENT || type == TOK_VAR_REF ||
+           type == TOK_LPAREN || type == TOK_LBRACK || type == TOK_LBRACE ||
+           type == TOK_STRING || type == TOK_TRUE || type == TOK_FLS ||
+           type == TOK_NIL || type == TOK_NOT ||
+           type == TOK_ASK || type == TOK_FRD || type == TOK_CSV || type == TOK_JRD;
+}
+
 static Expr* parse_coalesce();
 
 static Expr* parse_primary() {
@@ -146,6 +154,14 @@ static Expr* parse_primary() {
             }
         }
         if (!match(TOK_RBRACE)) error_at(peek().line, "Expected '}' after literal");
+    } else if (peek().type == TOK_ASK || peek().type == TOK_FRD || peek().type == TOK_CSV || peek().type == TOK_JRD) {
+        Token t = advance();
+        expr = create_expr(EXPR_IO);
+        expr->op = (OpType)t.type;
+        expr->line = t.line; expr->col = t.col;
+        if (can_start_expr(peek().type)) {
+            expr->args[expr->arg_count++] = parse_coalesce();
+        }
     } else if (peek().type == TOK_IDENT || peek().type == TOK_VAR_REF) {
         Token t = advance();
         if (t.type == TOK_IDENT && (peek().type == TOK_NUMBER || peek().type == TOK_IDENT || 
@@ -329,13 +345,6 @@ static BlockNode parse_block() {
     return block;
 }
 
-static int can_start_expr(TokenType type) {
-    return type == TOK_NUMBER || type == TOK_IDENT || type == TOK_VAR_REF ||
-           type == TOK_LPAREN || type == TOK_LBRACK || type == TOK_LBRACE ||
-           type == TOK_STRING || type == TOK_TRUE || type == TOK_FLS ||
-           type == TOK_NIL || type == TOK_NOT;
-}
-
 ASTNode* parse_statement() {
     ASTNode* node = calloc(1, sizeof(ASTNode));
     if (peek().type == TOK_IDENT && current_pos + 1 < global_token_count && global_tokens[current_pos+1].type == TOK_ASSIGN) {
@@ -411,6 +420,14 @@ ASTNode* parse_statement() {
     } else if (match(TOK_USE)) {
         node->stmt_type = STMT_USE; node->node.use_stmt = calloc(1, sizeof(UseStmtNode));
         if (match(TOK_IDENT)) strncpy(node->node.use_stmt->module_name, global_tokens[current_pos-1].lexeme, 63);
+    } else if (peek().type == TOK_SAY || peek().type == TOK_PRT || peek().type == TOK_FWR || peek().type == TOK_FAP) {
+        node->stmt_type = STMT_IO;
+        IONode* io = node->node.io_node = calloc(1, sizeof(IONode));
+        io->io_type = advance().type;
+        io->line = global_tokens[current_pos-1].line;
+        while (can_start_expr(peek().type) && io->arg_count < MAX_PARAMS) {
+            io->args[io->arg_count++] = parse_coalesce();
+        }
     } else if (match(TOK_INPT)) {
         node->stmt_type = STMT_INPT; InptNode* in = node->node.inpt = calloc(1, sizeof(InptNode));
         in->line = global_tokens[current_pos-1].line;
@@ -489,7 +506,7 @@ void free_expr(Expr* expr) {
     if (expr->type == EXPR_BINARY || expr->type == EXPR_COALESCE || expr->type == EXPR_PAIR) { 
         free_expr(expr->left); free_expr(expr->right); 
     }
-    else if (expr->type == EXPR_CALL || expr->type == EXPR_LIST || expr->type == EXPR_MAP || expr->type == EXPR_SET || expr->type == EXPR_TUPLE) { 
+    else if (expr->type == EXPR_CALL || expr->type == EXPR_LIST || expr->type == EXPR_MAP || expr->type == EXPR_SET || expr->type == EXPR_TUPLE || expr->type == EXPR_IO) { 
         for (int i = 0; i < expr->arg_count; i++) free_expr(expr->args[i]); 
     }
     free(expr);
@@ -543,6 +560,9 @@ void free_ast(ASTNode* ast) {
             free(ast->node.rpt_node->body.nodes); free(ast->node.rpt_node); break;
         case STMT_RET: free_expr(ast->node.ret_node->value); free(ast->node.ret_node); break;
         case STMT_LET: free_expr(ast->node.let_node->value); free(ast->node.let_node); break;
+        case STMT_IO:
+            for (int i = 0; i < ast->node.io_node->arg_count; i++) free_expr(ast->node.io_node->args[i]);
+            free(ast->node.io_node); break;
         default: break;
     }
     free(ast);

@@ -23,7 +23,8 @@ typedef enum {
     NODE_NXT,
     NODE_RET,
     NODE_LET,
-    NODE_DECL
+    NODE_DECL,
+    NODE_IO
 } NodeType;
 
 typedef enum {
@@ -46,7 +47,8 @@ typedef enum {
     EXPR_MAP,
     EXPR_SET,
     EXPR_TUPLE,
-    EXPR_PAIR
+    EXPR_PAIR,
+    EXPR_IO
 } ExprType;
 
 typedef struct Expr {
@@ -159,6 +161,14 @@ typedef struct {
     int   line;
 } DeclNode;
 
+typedef struct {
+    NodeType type;
+    TokenType io_type;
+    Expr*     args[MAX_PARAMS];
+    int       arg_count;
+    int       line;
+} IONode;
+
 typedef struct ASTNode ASTNode;
 
 typedef struct {
@@ -230,12 +240,13 @@ typedef struct ASTNode {
         RetNode*      ret_node;
         LetNode*      let_node;
         DeclNode*     decl_node;
+        IONode*       io_node;
     } node;
     enum { 
         STMT_EMPTY, STMT_ARITH, STMT_ASSIGN, STMT_PIPELINE, STMT_FN_DEF, 
         STMT_USE, STMT_INPT, STMT_IF, STMT_FOR, STMT_WHL, STMT_EACH, 
         STMT_RPT, STMT_BRK, STMT_NXT, STMT_RET, STMT_LET, STMT_BLOCK,
-        STMT_DECL
+        STMT_DECL, STMT_IO
     } stmt_type;
     /* Optional emt label prefix — set for 'emt "label" expr' and 'expr -> emt "label"' (U1) */
     char emt_label[64];

@@ -1,3 +1,4 @@
+#define _DEFAULT_SOURCE
 #define _POSIX_C_SOURCE 200809L
 #include "exec.h"
 #include "error.h"
@@ -8,7 +9,7 @@
 #include <errno.h>
 #include <math.h>
 
-static double val_to_double(Value v) {
+double val_to_double(Value v) {
     if (v.type == VAL_INT) return (double)v.as.integer;
     if (v.type == VAL_FLOAT) return v.as.float_val;
     if (v.type == VAL_BOOL) return (double)v.as.boolean;
@@ -102,7 +103,7 @@ static void free_value(Value v) {
     }
 }
 
-static Value clone_value(Value v) {
+Value clone_value(Value v) {
     Value res = v;
     switch (v.type) {
         case VAL_STRING:
@@ -134,6 +135,23 @@ static Value clone_value(Value v) {
             break;
     }
     return res;
+}
+
+char* value_to_string(Value v) {
+    char buf[128];
+    switch (v.type) {
+        case VAL_NIL: return strdup("nil");
+        case VAL_BOOL: return strdup(v.as.boolean ? "true" : "fls");
+        case VAL_INT: sprintf(buf, "%lld", v.as.integer); return strdup(buf);
+        case VAL_FLOAT: sprintf(buf, "%.6g", v.as.float_val); return strdup(buf);
+        case VAL_STRING: return strdup(v.as.string);
+        case VAL_ARRAY: return strdup("[array]");
+        case VAL_MAP: return strdup("{map}");
+        case VAL_SET: return strdup("{set}");
+        case VAL_TUPLE: return strdup("(tuple)");
+        case VAL_PAIR: return strdup("pair");
+        default: return strdup("unknown");
+    }
 }
 
 void free_symtable(SymTable* t) {
@@ -244,7 +262,7 @@ static int is_truthy(Value v) {
     }
 }
 
-static int values_equal(Value a, Value b) {
+int values_equal(Value a, Value b) {
     if (a.type != b.type) {
         if ((a.type == VAL_INT || a.type == VAL_FLOAT) && (b.type == VAL_INT || b.type == VAL_FLOAT))
             return val_to_double(a) == val_to_double(b);
@@ -348,6 +366,90 @@ static Value eval_expr(Expr* expr, SymTable* sym, FuncTable* ft) {
             *res.as.pair.key = eval_expr(expr->left, sym, ft);
             *res.as.pair.value = eval_expr(expr->right, sym, ft);
             return res;
+        case EXPR_IO: {
+            if (expr->op == (OpType)TOK_ASK) {
+                if (expr->arg_count > 0) {
+                    Value prompt = eval_expr(expr->args[0], sym, ft);
+                    char* s = value_to_string(prompt);
+                    printf("%s", s); fflush(stdout);
+                    free(s); free_value(prompt);
+                }
+                char buf[1024];
+                if (fgets(buf, sizeof(buf), stdin)) {
+                    size_t len = strlen(buf);
+                    while (len > 0 && (buf[len-1] == '\n' || buf[len-1] == '\r')) buf[--len] = '\0';
+                    res.type = VAL_STRING; res.as.string = strdup(buf);
+                }
+            } else if (expr->op == (OpType)TOK_FRD) {
+                if (expr->arg_count > 0) {
+                    Value path = eval_expr(expr->args[0], sym, ft);
+                    if (path.type == VAL_STRING) {
+                        FILE* f = fopen(path.as.string, "r");
+                        if (f) {
+                            fseek(f, 0, SEEK_END);
+                            long len = ftell(f);
+                            fseek(f, 0, SEEK_SET);
+                            char* content = malloc(len + 1);
+                            if (content) {
+                                size_t read_bytes = fread(content, 1, len, f);
+                                content[read_bytes] = '\0';
+                                res.type = VAL_STRING; res.as.string = content;
+                            }
+                            fclose(f);
+                        }
+                    }
+                    free_value(path);
+                }
+            } else if (expr->op == (OpType)TOK_CSV) {
+                if (expr->arg_count > 0) {
+                    Value path = eval_expr(expr->args[0], sym, ft);
+                    if (path.type == VAL_STRING) {
+                        FILE* f = fopen(path.as.string, "r");
+                        if (f) {
+                            res.type = VAL_ARRAY; res.as.list.elements = NULL; res.as.list.length = 0;
+                            char line[4096];
+                            while (fgets(line, sizeof(line), f)) {
+                                size_t len = strlen(line);
+                                while (len > 0 && (line[len-1] == '\n' || line[len-1] == '\r')) line[--len] = '\0';
+                                Value row; row.type = VAL_ARRAY; row.as.list.elements = NULL; row.as.list.length = 0;
+                                char* lptr = line;
+                                char* tok;
+                                while ((tok = strsep(&lptr, ",")) != NULL) {
+                                    row.as.list.elements = realloc(row.as.list.elements, (row.as.list.length + 1) * sizeof(Value));
+                                    Value v; v.type = VAL_STRING; v.as.string = strdup(tok); v.is_immutable = 0;
+                                    row.as.list.elements[row.as.list.length++] = v;
+                                }
+                                res.as.list.elements = realloc(res.as.list.elements, (res.as.list.length + 1) * sizeof(Value));
+                                res.as.list.elements[res.as.list.length++] = row;
+                            }
+                            fclose(f);
+                        }
+                    }
+                    free_value(path);
+                }
+            } else if (expr->op == (OpType)TOK_JRD) {
+                if (expr->arg_count > 0) {
+                    Value path = eval_expr(expr->args[0], sym, ft);
+                    if (path.type == VAL_STRING) {
+                        FILE* f = fopen(path.as.string, "r");
+                        if (f) {
+                            fseek(f, 0, SEEK_END);
+                            long len = ftell(f);
+                            fseek(f, 0, SEEK_SET);
+                            char* content = malloc(len + 1);
+                            if (content) {
+                                size_t read_bytes = fread(content, 1, len, f);
+                                content[read_bytes] = '\0';
+                                res.type = VAL_STRING; res.as.string = content;
+                            }
+                            fclose(f);
+                        }
+                    }
+                    free_value(path);
+                }
+            }
+            return res;
+        }
         case EXPR_BINARY: {
             if (expr->op == OP_NOT) {
                 Value v = eval_expr(expr->left, sym, ft);
@@ -640,8 +742,12 @@ ExecResult execute(ASTNode* ast, SymTable* sym, FuncTable* ft) {
         case STMT_FN_DEF: {
             FuncDef* fd = &ft->funcs[ft->count++];
             strncpy(fd->name, ast->node.fn_def->name, 63);
+            fd->name[63] = '\0';
             fd->param_count = ast->node.fn_def->param_count;
-            for (int i = 0; i < fd->param_count; i++) strncpy(fd->params[i], ast->node.fn_def->params[i], 63);
+            for (int i = 0; i < fd->param_count; i++) {
+                strncpy(fd->params[i], ast->node.fn_def->params[i], 63);
+                fd->params[i][63] = '\0';
+            }
             fd->body = clone_expr(ast->node.fn_def->body);
             fd->is_builtin = 0;
             break;
@@ -649,7 +755,38 @@ ExecResult execute(ASTNode* ast, SymTable* sym, FuncTable* ft) {
         case STMT_USE:
             if (strcmp(ast->node.use_stmt->module_name, "math") == 0) register_math_module(ft);
             else if (strcmp(ast->node.use_stmt->module_name, "io") == 0) register_io_module(ft);
+            else if (strcmp(ast->node.use_stmt->module_name, "list") == 0) register_list_module(ft);
+            else if (strcmp(ast->node.use_stmt->module_name, "string") == 0) register_string_module(ft);
             break;
+        case STMT_IO: {
+            IONode* io = ast->node.io_node;
+            if (io->io_type == TOK_SAY || io->io_type == TOK_PRT) {
+                for (int i = 0; i < io->arg_count; i++) {
+                    Value v = eval_expr(io->args[i], sym, ft);
+                    emit_value_no_newline(v);
+                    if (i < io->arg_count - 1) printf(" ");
+                    free_value(v);
+                }
+                if (io->io_type == TOK_SAY) printf("\n");
+                fflush(stdout);
+            } else if (io->io_type == TOK_FWR || io->io_type == TOK_FAP) {
+                if (io->arg_count >= 2) {
+                    Value path = eval_expr(io->args[0], sym, ft);
+                    Value data = eval_expr(io->args[1], sym, ft);
+                    if (path.type == VAL_STRING) {
+                        FILE* f = fopen(path.as.string, io->io_type == TOK_FWR ? "w" : "a");
+                        if (f) {
+                            char* s = value_to_string(data);
+                            fprintf(f, "%s", s);
+                            free(s);
+                            fclose(f);
+                        }
+                    }
+                    free_value(path); free_value(data);
+                }
+            }
+            break;
+        }
         case STMT_INPT: {
             if (ast->node.inpt->has_prompt) { printf("%s", ast->node.inpt->prompt); fflush(stdout); }
             Value v = read_input(ast->node.inpt->line);

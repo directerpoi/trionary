@@ -113,6 +113,8 @@ typedef struct {
 
 void register_math_module(FuncTable *ft);
 void register_io_module(FuncTable *ft);
+void register_list_module(FuncTable *ft);
+void register_string_module(FuncTable *ft);
 
 ExecResult execute(ASTNode* ast, SymTable* sym, FuncTable* ft);
 
