@@ -158,6 +158,17 @@ int main(int argc, char* argv[]) {
                      tokens[current+1].type == TOK_EMT) {
                 current += 2;
             }
+            /* Consume optional label string after emt (U1) */
+            if (current < token_count && tokens[current].type == TOK_STRING)
+                current++;
+            /* Consume optional sep "string" after emt [label] (U10) */
+            if (current < token_count &&
+                tokens[current].type == TOK_IDENT &&
+                strcmp(tokens[current].lexeme, "sep") == 0) {
+                current++; /* consume "sep" */
+                if (current < token_count && tokens[current].type == TOK_STRING)
+                    current++; /* consume separator string */
+            }
         }
         // Parse arithmetic followed by -> emt or variable starting new statement
         else if (tokens[current].type == TOK_NUMBER || tokens[current].type == TOK_IDENT) {
@@ -170,7 +181,22 @@ int main(int argc, char* argv[]) {
                 current++; // consume ->
                 if (current < token_count && tokens[current].type == TOK_EMT) {
                     current++; // consume emt
+                    /* Consume optional label string after emt (U1) */
+                    if (current < token_count && tokens[current].type == TOK_STRING)
+                        current++;
                 }
+            }
+        }
+        // Standalone emt ["label"] expr  (U1)
+        else if (tokens[current].type == TOK_EMT) {
+            current++; // consume emt
+            if (current < token_count && tokens[current].type == TOK_STRING)
+                current++; // consume optional label
+            // consume the expression tokens up to the next statement boundary
+            while (current < token_count &&
+                   tokens[current].type != TOK_EOF &&
+                   tokens[current].type != TOK_NEWLINE) {
+                current++;
             }
         } else {
             current++; // skip unknown token

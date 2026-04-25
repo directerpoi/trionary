@@ -1,0 +1,4 @@
+lst [1,2,3,4,5] | whn >2 -> emt sep ","
+lst [1,2,3] -> emt sep " | "
+lst [1,2,3] -> emt "Values:" sep ","
+lst [4,5,6] | whn >4 | trn *2 -> emt sep "-"
