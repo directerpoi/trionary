@@ -76,6 +76,8 @@ typedef struct {
     char op_lexeme[4];
     OpType op;
     double value;
+    char var_name[64];   /* used when is_variable == 1 */
+    int  is_variable;    /* 0 = numeric literal, 1 = variable reference */
     int line;            /* source line where this condition was parsed */
 } Condition;
 
