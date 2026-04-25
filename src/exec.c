@@ -6,6 +6,29 @@
 #include <string.h>
 #include <errno.h>
 
+/* Returns 1 if 'name' matches the pattern arg[0-9]+ (e.g. arg0, arg1, arg10).
+   Returns 0 otherwise.  Used to emit a warning rather than a hard error when
+   a script accesses an argument index beyond what was supplied on the CLI. */
+static int is_argn_variable(const char* name) {
+    if (name[0] != 'a' || name[1] != 'r' || name[2] != 'g' || name[3] == '\0')
+        return 0;
+    for (int i = 3; name[i] != '\0'; i++)
+        if (name[i] < '0' || name[i] > '9') return 0;
+    return 1;
+}
+
+/* Emit a stderr warning for an out-of-range argN access (no ?? fallback).
+   Flushes stdout first so that already-printed output appears before the
+   warning in combined stdout+stderr captures. */
+static void warn_argn_undefined(SymTable* sym, const char* name) {
+    fflush(stdout);
+    int argc_val = sym_exists(sym, "argc") ? (int)sym_get(sym, "argc") : 0;
+    fprintf(stderr,
+            "Warning: '%s' is not defined (argc=%d); returning 0."
+            " Consider using '%s ?? default'.\n",
+            name, argc_val, name);
+}
+
 /* djb2 hash, folded into [0, SCOPE_CAPACITY). */
 static unsigned int scope_hash(const char* name) {
     unsigned int h = 5381;
@@ -141,6 +164,10 @@ static double eval_expr(Expr* expr, SymTable* sym, FuncTable* ft) {
             
         case EXPR_VARIABLE:
             if (!sym_exists(sym, expr->var_name)) {
+                if (is_argn_variable(expr->var_name)) {
+                    warn_argn_undefined(sym, expr->var_name);
+                    return 0.0;
+                }
                 if (expr->col > 0) set_error_col(expr->col);
                 error_at(expr->line, "Undefined variable '%s'", expr->var_name);
             }
@@ -345,6 +372,11 @@ static void exec_assign(AssignNode* node, SymTable* sym) {
             break;
         case ASSIGN_VARIABLE:
             if (!sym_exists(sym, node->rhs_name)) {
+                if (is_argn_variable(node->rhs_name)) {
+                    warn_argn_undefined(sym, node->rhs_name);
+                    val = 0.0;
+                    break;
+                }
                 error_at(node->line, "Undefined variable '%s'", node->rhs_name);
             }
             val = sym_get(sym, node->rhs_name);

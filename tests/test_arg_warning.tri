@@ -1,0 +1,11 @@
+# Step 9 — argN out-of-range warning (U9)
+# Run as: ./tri run tests/test_arg_warning.tri 42
+#
+# argc=1, arg0=42, arg1 and arg2 are absent.
+# Accessing arg0 (defined): prints 42, no warning.
+# Accessing arg1 (missing): warning to stderr + returns 0.
+# Accessing arg2 via ?? (coalesce): silent, no warning, prints 99.
+
+arg0 -> emt
+arg1 -> emt
+arg2 ?? 99 -> emt

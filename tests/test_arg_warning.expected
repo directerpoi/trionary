@@ -1,0 +1,4 @@
+42
+Warning: 'arg1' is not defined (argc=1); returning 0. Consider using 'arg1 ?? default'.
+0
+99
