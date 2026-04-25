@@ -30,6 +30,14 @@ static int is_keyword(const char* word) {
            strcmp(word, "end") == 0 ||
            strcmp(word, "use") == 0 ||
            strcmp(word, "inpt") == 0 ||
+           strcmp(word, "say") == 0 ||
+           strcmp(word, "prt") == 0 ||
+           strcmp(word, "ask") == 0 ||
+           strcmp(word, "frd") == 0 ||
+           strcmp(word, "fwr") == 0 ||
+           strcmp(word, "fap") == 0 ||
+           strcmp(word, "csv") == 0 ||
+           strcmp(word, "jrd") == 0 ||
            strcmp(word, "if") == 0 ||
            strcmp(word, "els") == 0 ||
            strcmp(word, "elif") == 0 ||
@@ -69,6 +77,14 @@ static TokenType keyword_type(const char* word) {
     if (strcmp(word, "end") == 0) return TOK_END;
     if (strcmp(word, "use") == 0) return TOK_USE;
     if (strcmp(word, "inpt") == 0) return TOK_INPT;
+    if (strcmp(word, "say") == 0) return TOK_SAY;
+    if (strcmp(word, "prt") == 0) return TOK_PRT;
+    if (strcmp(word, "ask") == 0) return TOK_ASK;
+    if (strcmp(word, "frd") == 0) return TOK_FRD;
+    if (strcmp(word, "fwr") == 0) return TOK_FWR;
+    if (strcmp(word, "fap") == 0) return TOK_FAP;
+    if (strcmp(word, "csv") == 0) return TOK_CSV;
+    if (strcmp(word, "jrd") == 0) return TOK_JRD;
     if (strcmp(word, "if") == 0) return TOK_IF;
     if (strcmp(word, "els") == 0) return TOK_ELS;
     if (strcmp(word, "elif") == 0) return TOK_ELIF;

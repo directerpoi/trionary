@@ -1,6 +1,6 @@
 CC      = gcc
 CFLAGS  = -std=c11 -Wall -Wextra -O2 -Iinclude
-SRCS    = src/main.c src/reader.c src/lexer.c src/parser.c src/exec.c src/output.c src/error.c src/modules/math.c src/modules/io.c
+SRCS    = src/main.c src/reader.c src/lexer.c src/parser.c src/exec.c src/output.c src/error.c src/modules/math.c src/modules/io.c src/modules/list.c src/modules/string.c
 TARGET  = tri
 
 $(TARGET): $(SRCS)

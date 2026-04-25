@@ -69,3 +69,54 @@ pair_expr  → coalesce_expr (':' pair_expr)?
 ## Backward Compatibility
 - Existing numeric pipelines and arithmetic statements remain fully functional.
 - The `inpt` keyword still reads interactive input (now supports string fallback if input is not numeric).
+- `print` and `read_line` in the `io` module remain available for compatibility.
+
+---
+
+# v0.6.0 Standard Functions & I/O Expansion
+
+## What Was Done
+
+Implemented a comprehensive suite of standard functions for math, list, and string manipulation, and expanded the language with new I/O keywords for better developer experience and file handling.
+
+## New I/O Keywords
+
+| Keyword | Type | Description | Example |
+|---------|------|-------------|---------|
+| `say` | Keyword | Print value(s) followed by a newline | `say "Hello"` |
+| `prt` | Keyword | Print value(s) without trailing newline | `prt "> "` |
+| `ask` | Keyword | Prompt and read string input (expression) | `let name = ask "Name: "` |
+| `frd` | Keyword | Read entire contents of a file | `let data = frd "input.txt"` |
+| `fwr` | Keyword | Overwrite file with content | `fwr "out.txt" "content"` |
+| `fap` | Keyword | Append content to a file | `fap "log.txt" "new line"` |
+| `csv` | Keyword | Parse CSV file into a list of lists | `let rows = csv "data.csv"` |
+| `jrd` | Keyword | Read a file (JSON placeholder) | `let cfg = jrd "config.json"` |
+
+## Standard Modules
+
+### Math Module (`use math`)
+- **Trigonometric:** `sin`, `cos`, `tan`
+- **Logarithmic/Exponential:** `log`, `log10`, `exp`
+- **Utility:** `mod`, `round`, `min`, `max`, `clmp`, `rnd`, `rndi`
+
+### List Module (`use list`)
+- **Sorting/Reversing:** `srt`, `srtd`, `rev`
+- **Analysis:** `cnt`, `avg`
+- **Manipulation:** `unq`, `zip`, `slc`, `flat`, `push`, `pop`
+- **Search:** `fnd`, `idx`
+
+### String Module (`use string`)
+- **Basics:** `cat`, `len`, `sub`, `tostr`
+- **Case:** `upr`, `lwr`
+- **Edit:** `trm`, `spl`, `rep`, `fmt`
+- **Search/Parse:** `has`, `num`
+
+### IO Module (`use io`)
+- **Existing:** `print`, `read_line`
+- **New:** `fex` (check path exists), `fls` (list directory)
+
+## Technical Changes
+- **Variadic Built-ins:** Updated function table and executor to support variadic arguments for built-ins like `min`, `max`, `cat`, `fmt`.
+- **I/O Node Type:** Added `IONode` to AST and `STMT_IO` / `EXPR_IO` to handle keyword-based I/O.
+- **Improved Print:** `print` now accepts multiple arguments and separates them with spaces.
+

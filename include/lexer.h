@@ -29,6 +29,14 @@ typedef enum {
     TOK_NEWLINE,            /* newline — used to separate fn params from body */
     TOK_COALESCE,           /* ?? — default/fallback operator */
     TOK_INPT,               /* inpt — interactive numeric input keyword */
+    TOK_SAY,                /* say — print with newline */
+    TOK_PRT,                /* prt — print without newline */
+    TOK_ASK,                /* ask — prompt and read input */
+    TOK_FRD,                /* frd — file read */
+    TOK_FWR,                /* fwr — file write */
+    TOK_FAP,                /* fap — file append */
+    TOK_CSV,                /* csv — csv read */
+    TOK_JRD,                /* jrd — json read */
     TOK_STRING              /* "..." — string literal */
 } TokenType;
 
